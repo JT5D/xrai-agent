@@ -64,6 +64,6 @@ test('retry followups automatically reuse the prior meaningful task',()=>{
     const text=contextualizeFollowup(phrase,storage);
     assert.match(text,/mode: retry/);
     assert.match(text,/Task: review repo, fix any failed tests, verify & explain/);
-    assert.doesNotMatch(text,/ask the user to restate/i);
+    assert.match(text,/use this context automatically/);
   }
 });
