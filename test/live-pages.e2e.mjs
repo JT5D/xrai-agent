@@ -6,9 +6,10 @@ const rawBase=process.argv[2]||process.env.XRAI_LIVE_URL||'https://jt5d.github.i
 const flow=process.argv[3]||process.env.XRAI_E2E_FLOW||'smoke';
 const base=rawBase.replace(/^http:/,'https:').replace(/\/?$/,'/');
 const artifacts='artifacts';
-const FLOW_DEADLINES={smoke:60_000,web:45_000,'chat-retry':180_000,repo:360_000};
+const FLOW_DEADLINES={smoke:60_000,web:45_000,'chat-retry':60_000,'model-runtime':90_000,repo:360_000};
 const flowDeadline=FLOW_DEADLINES[flow]||180_000;
-const softwareWebGpu=flow==='chat-retry';
+const deterministicChatModel=flow==='chat-retry';
+const softwareWebGpu=flow==='model-runtime';
 const headed=flow==='repo'||softwareWebGpu;
 const launchArgs=softwareWebGpu?[
   '--enable-unsafe-webgpu',
@@ -24,7 +25,7 @@ const launchArgs=softwareWebGpu?[
 ]:[];
 await fs.mkdir(artifacts,{recursive:true});
 const reportPath=`${artifacts}/live-e2e-${flow}.json`;
-const report={base,flow,browserMode:headed?'headed-xvfb':'headless',softwareWebGpu,startedAt:new Date().toISOString(),phase:'starting',flows:{},consoleErrors:[],pageErrors:[],submitProbes:[],navigations:[],networkEvents:[],flowDeadlineMs:flowDeadline,lastHeartbeat:null};
+const report={base,flow,browserMode:headed?'headed-xvfb':'headless',deterministicChatModel,softwareWebGpu,startedAt:new Date().toISOString(),phase:'starting',flows:{},consoleErrors:[],pageErrors:[],submitProbes:[],navigations:[],networkEvents:[],flowDeadlineMs:flowDeadline,lastHeartbeat:null};
 let browser;
 let page;
 let finished=false;
@@ -114,13 +115,14 @@ async function runChatRetry(){
   checkpoint('chat:start');
   const task='What is 2 + 2? Reply briefly.';
   const beforeAgents=(await agentMessages()).length;
-  const chat=await submit(task,75_000);
+  const chat=await submit(task,20_000);
   const users=await userMessages(),agents=await agentMessages();
   require(users.filter(x=>x===task).length===1,`normal chat user message count was ${users.filter(x=>x===task).length}, expected 1`);
   require(chat.runStatus==='completed',`normal chat ended with ${chat.runStatus}: ${chat.statusText||''}`);
   require(agents.length>beforeAgents,'normal chat produced no agent response');
   require(String(chat.result?.output||'').trim().length>0,'normal chat result output was empty');
-  report.flows.chat={ok:true,provider:chat.result?.provider,runId:chat.result?.runId,output:String(chat.result?.output||'').slice(0,500)};
+  require(chat.result?.provider==='Chrome built-in AI',`deterministic chat seam was not used: ${chat.result?.provider||'none'}`);
+  report.flows.chat={ok:true,provider:chat.result?.provider,runId:chat.result?.runId,output:String(chat.result?.output||'').slice(0,500),deterministicModel:true};
   checkpoint('chat:done');
 
   checkpoint('retry:start');
@@ -128,15 +130,39 @@ async function runChatRetry(){
   await waitForReady();
   await within(page.locator('#task').fill('try again',{timeout:5000}),'fill retry',6000);
   await within(page.locator('#runButton').click({noWaitAfter:true,timeout:5000}),'retry click',6000);
-  const retry=await waitForNewResult(oldRun,75_000);
+  const retry=await waitForNewResult(oldRun,20_000);
   const retryUsers=await userMessages();
   require(retryUsers.filter(x=>x==='try again').length===1,`retry visible message count was ${retryUsers.filter(x=>x==='try again').length}, expected 1`);
   require(retryUsers.at(-1)==='try again',`retry did not remain the latest visible user message; latest was ${JSON.stringify(retryUsers.at(-1))}`);
   require(!retryUsers.some(x=>x.includes('Previous XRAI context')),'hidden retry context leaked into visible user chat');
   require(retry.runStatus==='completed',`retry ended with ${retry.runStatus}: ${retry.statusText||''}`);
   require(retry.result?.runId!==oldRun,'retry did not execute a new run');
-  report.flows.retry={ok:true,runId:retry.result?.runId,visibleLatest:retryUsers.at(-1)};
+  report.flows.retry={ok:true,runId:retry.result?.runId,visibleLatest:retryUsers.at(-1),deterministicModel:true};
   checkpoint('retry:done');
+}
+
+async function runModelRuntime(){
+  checkpoint('model-runtime:start');
+  const task='Reply with OK.';
+  await waitForReady();
+  await within(page.locator('#task').fill(task,{timeout:5000}),'fill model smoke task',6000);
+  await within(page.locator('#runButton').click({noWaitAfter:true,timeout:5000}),'model smoke click',6000);
+  const registered=await waitForTaskRegistration(task,3000);
+  require(registered,'real model smoke task did not register');
+  await within(page.waitForFunction(()=>{
+    try{
+      const s=JSON.parse(localStorage.getItem('xrai-ui-v4')||'null');
+      return Boolean(s?.events?.some(e=>e?.type==='model:ready'))||s?.runStatus==='error';
+    }catch{return false}
+  },null,{timeout:45_000,polling:250}),'real local model ready',46_000);
+  const current=await state();
+  require(current?.runStatus!=='error',`real local model failed to initialize: ${current?.statusText||'unknown error'}`);
+  const ready=(current?.events||[]).find(e=>e?.type==='model:ready');
+  require(ready,'real local model emitted no model:ready event');
+  require(/SmolLM2|LFM/i.test(String(ready.summary||'')),`unexpected real local model: ${ready.summary||'none'}`);
+  require(report.networkEvents.some(e=>/huggingface\.co\/.*model_q4/i.test(e.url)),'real local model smoke saw no q4 model fetch');
+  report.flows.modelRuntime={ok:true,model:ready.summary,webgpuAdapter:report.runtime?.webgpuAdapter,crossOriginIsolated:report.runtime?.crossOriginIsolated};
+  checkpoint('model-runtime:ready');
 }
 
 async function runWeb(){
@@ -182,6 +208,19 @@ try{
   page.setDefaultNavigationTimeout(60_000);
   await page.exposeFunction('__xraiE2EHeartbeat',ts=>{report.lastHeartbeat=Number(ts)||Date.now()});
   await page.addInitScript(()=>{setInterval(()=>globalThis.__xraiE2EHeartbeat?.(Date.now()),500)});
+  if(deterministicChatModel)await page.addInitScript(()=>{
+    const makeSession=()=>({
+      async prompt(text){
+        const input=String(text||'');
+        if(/XRAI Planner/i.test(input))return '{"plan":"Answer directly and briefly.","workers":1,"parallel":false}';
+        if(/strict evaluator/i.test(input))return '{"score":0.98,"pathScore":0.98,"critique":"Correct and concise.","pathCritique":"Direct chat path verified.","skill":{"title":"","trigger":"","procedure":"","verifier":"","tags":[]}}';
+        return '4';
+      },
+      async clone(){return makeSession()},
+      destroy(){}
+    });
+    globalThis.LanguageModel={availability:async()=> 'available',create:async()=>makeSession()};
+  });
   page.on('console',msg=>{if(msg.type()==='error')report.consoleErrors.push(msg.text())});
   page.on('pageerror',error=>report.pageErrors.push(String(error?.stack||error)));
   page.on('framenavigated',frame=>{if(frame===page.mainFrame()){report.navigations.push({url:frame.url(),ts:new Date().toISOString()});checkpoint('navigation')}});
@@ -203,6 +242,7 @@ try{
   checkpoint('runtime:ready');
 
   if(flow==='chat-retry')await runChatRetry();
+  else if(flow==='model-runtime')await runModelRuntime();
   else if(flow==='web')await runWeb();
   else if(flow==='repo')await runRepo();
   else if(flow!=='smoke')throw new Error(`Unknown E2E flow: ${flow}`);
