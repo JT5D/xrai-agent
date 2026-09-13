@@ -39,6 +39,19 @@ test('public composer stays inert until app initialization owns form submission'
   assert.match(app,/\$\('#runButton'\)\.disabled=ui\.runStatus==='running'/);
 });
 
+test('built-in browser tools publish persisted results without reloading them away',async()=>{
+  const enhancements=await fs.readFile(new URL('../web/browser-enhancements.js',import.meta.url),'utf8');
+  const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
+  const start=enhancements.indexOf('async function executeBuiltin');
+  const end=enhancements.indexOf('function queueRetry');
+  const block=enhancements.slice(start,end);
+  assert.ok(start>=0&&end>start,'executeBuiltin block missing');
+  assert.doesNotMatch(block,/location\.reload/);
+  assert.match(block,/dispatchEvent\(new Event\('xrai:state-updated'\)\)/);
+  assert.match(app,/addEventListener\('xrai:state-updated'/);
+  assert.match(app,/ui=loadUiState\(localStorage\);renderAll\(\)/);
+});
+
 test('retry memory never rewrites the visible chat input',async()=>{
   const guard=await fs.readFile(new URL('../web/input-guard.js',import.meta.url),'utf8');
   const enhancements=await fs.readFile(new URL('../web/browser-enhancements.js',import.meta.url),'utf8');
