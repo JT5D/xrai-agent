@@ -1,0 +1,76 @@
+name: Validate runtime evidence repair
+on:
+  push:
+    branches: [fix/runtime-evidence-20260913]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Integrate reviewed status tool
+        run: |
+          mkdir -p artifacts
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          def replace(file,old,new):
+              p=Path(file);s=p.read_text();assert s.count(old)==1,(file,old,s.count(old));p.write_text(s.replace(old,new))
+          f='web/capability-tools.js'
+          replace(f,'import { verifiedImprovementsForRun',"import { isRuntimeStatusQuestion,inspectRuntimeStatus } from './runtime-status.js';\nimport { verifiedImprovementsForRun")
+          replace(f,'  if((SELF_IMPROVE_PROOF_RE',"  if(isRuntimeStatusQuestion(text))return 'runtime-status';\n  if((SELF_IMPROVE_PROOF_RE")
+          replace(f,"  if(kind==='self-improvement-proof'){","""  if(kind==='runtime-status'){
+              progress('Inspecting recorded execution and deployment checks...');
+              event('tool:start','Read runtime verification evidence',{name:'runtime_status'});
+              const result=await inspectRuntimeStatus({state:loadUiState(storage),fetchFn});
+              event('tool:done',result.output.slice(0,2000),{name:'runtime_status',data:{status:result.status}});
+              event('run:done','Runtime evidence inspected; no new tests or edits',{data:{provider:'runtime-evidence',score:null}});
+              return {...result,runId};
+            }
+            if(kind==='self-improvement-proof'){""")
+          replace(f,"  ['Real verification'","  ['Runtime status evidence','Reads recorded command receipts and live checks for the exact deployed build; never guesses from model confidence.'],\n  ['Real verification'")
+          f='web/app.js'
+          replace(f,"['capabilities','capabilities+web','self-improvement-proof']","['capabilities','capabilities+web','self-improvement-proof','runtime-status']")
+          replace(f,'goal:isContinuation(cleaned)?context.goal:cleaned',"goal:(isContinuation(cleaned)||classifyBuiltinTask(cleaned)==='runtime-status')?context.goal:cleaned")
+          replace(f,"status==='error'?'Needs attention'","['error','incomplete','interrupted'].includes(status)?'Needs attention'")
+          replace(f,"ui.runStatus==='error'?'Needs attention'","['error','incomplete','interrupted'].includes(ui.runStatus)?'Needs attention'")
+          replace('web/browser-workspace.js',"learning:'evidence',sha:snapshot.sha,changedFiles:","learning:'evidence',status:!passed||(requestedChange&&!finalChanges.length)?'incomplete':'completed',sha:snapshot.sha,changedFiles:")
+          p=Path('package.json');data=json.loads(p.read_text());assert data['version']=='0.3.48';data['version']='0.3.49';p.write_text(json.dumps(data,indent=2)+'\n')
+          p=Path('web/index.html');s=p.read_text();assert '0.3.48' in s;p.write_text(s.replace('0.3.48','0.3.49'))
+          p=Path('README.md');s=p.read_text().replace('v0.3.48','v0.3.49');p.write_text(s+'\n## Runtime status evidence\n\nAsk "are we fixed & working now?" to inspect recorded command receipts and live deployment checks for the exact build. This read-only tool does not call a language model, run tests, or invent repairs. Failed, cancelled, missing, or stale checks remain unverified. Status questions preserve the prior task.\n')
+          PY
+      - name: Source and regression checks
+        run: npm run check > artifacts/source-checks.txt 2>&1
+      - name: Browser interaction and recovery checks
+        if: always()
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.55.0
+          node test/status.e2e.mjs > artifacts/status-browser.txt 2>&1
+          node test/conversation.e2e.mjs > artifacts/conversation-browser.txt 2>&1
+      - name: Publish tested source branch without temporary workflow
+        if: success()
+        run: |
+          git config user.name JT5D
+          git config user.email jtunick@theimclab.com
+          git rm .github/workflows/status-validation.yml
+          git add web test package.json README.md
+          tree=$(git write-tree)
+          commit=$(printf '%s\n' 'Ground runtime status in command receipts and exact-build deployment checks' | git commit-tree "$tree" -p a30d6826f9db39e9051ef3ec9984635ecc4c706c)
+          git push origin "$commit:refs/heads/fix/runtime-evidence-tested-20260913"
+          printf '%s\n' "$commit" > artifacts/tested-commit.txt
+      - name: Export inspected source and evidence
+        if: always()
+        run: tar -czf artifacts/source.tar.gz README.md package.json src web test .github
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: runtime-evidence-validation
+          path: artifacts/
+          retention-days: 7
