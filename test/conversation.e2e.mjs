@@ -54,7 +54,8 @@ try{
     const prompts=await page.evaluate(()=>globalThis.testPrompts);assert.equal(prompts.length,2);assert.match(prompts[1],/prevent duplicate replies/);
     assert.ok(s.messages.every(m=>!m.text.includes('Previous XRAI context')));
     await send('research similar popular repos and recommend improvements');
-    await send('did self improvements happen?');
+    const proof=await send('did self improvements happen?');
+    assert.match(proof.result.output,/^0 verified improvements/,'proof questions must not rerun the prior search');
     s=await send('Summarize what we discussed.');
     assert.match((await page.evaluate(()=>globalThis.testPrompts)).at(-1),/research similar popular repos/);
     assert.equal(s.messages.filter(m=>m.role==='user').length,5);assert.equal(s.messages.filter(m=>m.role==='agent'&&m.id!=='welcome').length,5);
