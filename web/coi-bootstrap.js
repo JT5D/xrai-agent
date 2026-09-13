@@ -1,7 +1,7 @@
 (()=>{
   if(globalThis.crossOriginIsolated||!('serviceWorker' in navigator))return;
   const key='xrai-coi-reload-v1';
-  navigator.serviceWorker.register('./coi-sw.js',{scope:'./'}).then(async()=>{
+  navigator.serviceWorker.register('./coi-sw.js',{scope:'./',updateViaCache:'none'}).then(async()=>{
     await navigator.serviceWorker.ready;
     if(navigator.serviceWorker.controller){sessionStorage.removeItem(key);return}
     if(sessionStorage.getItem(key))return;
