@@ -98,7 +98,6 @@ export function contextualizeFollowup(task,storage=globalThis.localStorage){
 }
 
 if(typeof window!=='undefined'){
-  purgeStaleUiState(window.localStorage);
-  migrateLegacyUiState(window.localStorage);
+  // Historical error messages are conversation data, not a reason to erase history.
   repairLeakedContextState(window.localStorage);
 }
