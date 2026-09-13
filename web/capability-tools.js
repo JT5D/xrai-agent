@@ -2,7 +2,7 @@ import { verifiedImprovementsForRun,formatVerifiedImprovementReport } from './im
 import { loadUiState } from './state.js';
 import { formatWebResults,searchWeb } from './web-search.js';
 
-const CAPABILITY_RE=/\b(capabilit(?:y|ies)|what can (?:you|it|xrai)|can (?:you|it|xrai) (?:do|search)|what (?:are|tools|features))\b/i;
+const CAPABILITY_RE=/\b(capabilit(?:y|ies)|what can (?:you|it|xrai)|can (?:you|it|xrai) (?:do|search)|(?:your|xrai) (?:tools|features))\b/i;
 const WEB_RE=/\b(?:research|search online|search github)\b|\b(web search|search the web|search online|search the internet|look up online|research online|internet search)\b/i;
 const FRESH_RE=/\b(latest|current|today|recent|up[- ]?to[- ]?date|this week|this month)\b/i;
 const ADD_WEB_RE=/\b(add|create|install|enable|implement)\b[\s\S]{0,80}\b(web search|search skill|internet search)\b/i;
