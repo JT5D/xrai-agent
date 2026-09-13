@@ -1,0 +1,65 @@
+name: Verify model quality candidate
+on:
+  push:
+    branches: [repair/model-quality-final]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply focused default-model fix
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('web/local-agent.js');s=p.read_text();old='resolveBrowserModelProfile(navigator,true)';assert s.count(old)==1;p.write_text(s.replace(old,'resolveBrowserModelProfile(navigator)'))
+          p=Path('test/live-pages.e2e.mjs');s=p.read_text();s=s.replace("rawBase.replace(/^http:/,'https:')","rawBase.replace(/^http:\\/\\/(?!127\\.0\\.0\\.1)/,'https://')")
+          old="checkpoint('model-runtime:ready');";assert old in s
+          s=s.replace(old,"const remembered=await submit('Our project code name is Sapphire. Reply with the code name only.',30000); require(/Sapphire/i.test(remembered.result?.output||''),'model did not follow the project-name instruction'); const followup=await submit('What is our project code name? Reply with the name only.',30000); require(/Sapphire/i.test(followup.result?.output||''),'real model lost conversation context'); report.flows.realConversation={ok:true,output:followup.result.output}; "+old)
+          p.write_text(s)
+          PY
+          cat > test/model-default.test.js <<'JS'
+          import test from 'node:test';
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import {selectBrowserModelProfile} from '../web/local-agent.js';
+          test('capable desktops are not forced onto the smallest model',()=>{
+           const source=fs.readFileSync(new URL('../web/local-agent.js',import.meta.url),'utf8');
+           assert.ok(!source.includes('resolveBrowserModelProfile(navigator,true)'));
+           assert.match(selectBrowserModelProfile({deviceMemory:16,userAgent:'Desktop Chrome',hardwareConcurrency:8}).modelId,/LFM2.5-350M/);
+          });
+          JS
+          mkdir -p artifacts
+          npm run check > artifacts/source-checks.txt 2>&1
+      - name: Exercise real candidate model and conversation
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.55.0
+          cp -R knowledge web/knowledge
+          python3 -m http.server 8080 --bind 127.0.0.1 --directory web > artifacts/server.log 2>&1 &
+          sleep 1
+          xvfb-run -a node test/live-pages.e2e.mjs http://127.0.0.1:8080/ model-runtime
+      - name: Publish tested source-only candidate
+        if: success()
+        run: |
+          git config user.name JT5D
+          git config user.email jtunick@theimclab.com
+          base=$(git rev-parse HEAD^)
+          git read-tree "$base"
+          git add web/local-agent.js test/model-default.test.js
+          tree=$(git write-tree)
+          commit=$(printf '%s\n' 'Use intended capable-desktop model instead of forcing the smallest fallback' | git commit-tree "$tree" -p "$base")
+          git push origin "$commit:refs/heads/repair/model-quality-final-tested"
+          echo "$commit" > artifacts/tested-commit.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-model-quality-candidate
+          path: artifacts/
+          retention-days: 7
