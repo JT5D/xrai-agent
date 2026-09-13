@@ -1,6 +1,7 @@
 const LEGACY_UI_KEY='xrai-ui-v3';
 const CURRENT_UI_KEY='xrai-ui-v4';
 const DEFAULT_REPO='JT5D/xrai-agent';
+const CONTEXT_MARKER='\n\nPrevious XRAI context';
 
 const API_REPO_URL=/https?:\/\/api\.github\.com\/repos\/[^\s)\]}>'"]+/gi;
 const BAD_PAIR=/\b(filesystem|file|files|repo|repository|repos|codebase|src|test|tests|build|api\.github\.com|github\.com|https?|localhost)\/(filesystem|file|files|repo|repository|repos|codebase|src|test|tests|build|api\.github\.com|github\.com|https?|localhost)\b/gi;
@@ -14,13 +15,29 @@ export function sanitizeTask(task=''){
   return text;
 }
 
+export function visibleTask(task=''){
+  return sanitizeTask(String(task).split(CONTEXT_MARKER,1)[0]).trim();
+}
+
 export function isContextualFollowup(task=''){
-  const text=String(task).trim();
+  const text=visibleTask(task);
   return QUESTION_FOLLOWUP.test(text)||RETRY_FOLLOWUP.test(text);
 }
 
 export function isRetryFollowup(task=''){
-  return RETRY_FOLLOWUP.test(String(task).trim());
+  return RETRY_FOLLOWUP.test(visibleTask(task));
+}
+
+export function lastMeaningfulUserTask(state){
+  const messages=Array.isArray(state?.messages)?state.messages:[];
+  for(let i=messages.length-1;i>=0;i--){
+    const message=messages[i];
+    if(message?.role!=='user')continue;
+    const text=visibleTask(message?.text||'');
+    if(text&&!isContextualFollowup(text))return text;
+  }
+  const lastTask=visibleTask(state?.lastTask||'');
+  return lastTask&&!isContextualFollowup(lastTask)?lastTask:'';
 }
 
 export function stateLooksStale(value){
@@ -50,21 +67,21 @@ export function migrateLegacyUiState(storage=globalThis.localStorage){
   return false;
 }
 
-function lastMeaningfulUserTask(state){
-  const lastTask=String(state?.lastTask||'').split('\n\nPrevious XRAI context',1)[0].trim();
-  if(lastTask&&!isContextualFollowup(lastTask))return lastTask;
-  const messages=Array.isArray(state?.messages)?state.messages:[];
-  for(let i=messages.length-1;i>=0;i--){
-    const message=messages[i];
-    if(message?.role!=='user')continue;
-    const text=String(message?.text||'').split('\n\nPrevious XRAI context',1)[0].trim();
-    if(text&&!isContextualFollowup(text))return text;
-  }
-  return '';
+export function repairLeakedContextState(storage=globalThis.localStorage){
+  try{
+    const raw=storage?.getItem(CURRENT_UI_KEY);if(!raw)return false;
+    const state=JSON.parse(raw);if(!state||typeof state!=='object')return false;
+    const leaked=String(state.lastTask||'').includes(CONTEXT_MARKER)||(Array.isArray(state.messages)&&state.messages.some(m=>String(m?.text||'').includes(CONTEXT_MARKER)));
+    if(!leaked)return false;
+    const prior=lastMeaningfulUserTask(state);
+    if(Array.isArray(state.messages))state.messages=state.messages.map(m=>m?.role==='user'?{...m,text:visibleTask(m.text)}:m);
+    state.lastTask=prior||visibleTask(state.lastTask||'');
+    state.updatedAt=Date.now();storage.setItem(CURRENT_UI_KEY,JSON.stringify(state));return true;
+  }catch{return false}
 }
 
 export function contextualizeFollowup(task,storage=globalThis.localStorage){
-  const clean=sanitizeTask(task);
+  const clean=visibleTask(task);
   if(!isContextualFollowup(clean))return clean;
   try{
     const state=JSON.parse(storage?.getItem(CURRENT_UI_KEY)||'null');
@@ -72,16 +89,12 @@ export function contextualizeFollowup(task,storage=globalThis.localStorage){
     const priorResult=String(state?.result?.output||'').trim();
     if(!priorTask&&!priorResult)return clean;
     const mode=isRetryFollowup(clean)?'retry':'reference';
-    return `${clean}\n\nPrevious XRAI context (mode: ${mode}; use this context automatically; do not ask the user to restate it):\nTask: ${priorTask||DEFAULT_REPO}\nResult: ${(priorResult||'No completed result was recorded.').slice(0,1600)}`;
+    return `${clean}${CONTEXT_MARKER} (mode: ${mode}; internal only):\nTask: ${priorTask||DEFAULT_REPO}\nResult: ${(priorResult||'No completed result was recorded.').slice(0,1600)}`;
   }catch{return clean}
 }
 
-if(typeof window!=='undefined'&&typeof document!=='undefined'){
+if(typeof window!=='undefined'){
   purgeStaleUiState(window.localStorage);
   migrateLegacyUiState(window.localStorage);
-  document.addEventListener('submit',event=>{
-    const form=event.target;if(!(form instanceof HTMLFormElement)||form.id!=='chatForm')return;
-    const input=form.querySelector('#task');if(!(input instanceof HTMLTextAreaElement))return;
-    input.value=contextualizeFollowup(input.value,window.localStorage);
-  },true);
+  repairLeakedContextState(window.localStorage);
 }
