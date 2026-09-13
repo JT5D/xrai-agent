@@ -8,9 +8,11 @@ const HOST_PATTERNS=[
   /\b(npm|pnpm|yarn|bun|pytest|cargo|go test|make|cmake|gradle|mvn)\b/i,
   /\b(run|execute|verify)\b[\s\S]{0,30}\b(test|tests|build|lint|command|script)\b/i
 ];
+const CONTEXT_MARKER='\n\nPrevious XRAI context';
 
 export function taskNeedsExecutionHost(task=''){
-  return HOST_PATTERNS.some(pattern=>pattern.test(String(task)));
+  const primary=String(task).split(CONTEXT_MARKER,1)[0];
+  return HOST_PATTERNS.some(pattern=>pattern.test(primary));
 }
 
 export function isConstrainedDevice(nav={}){
