@@ -48,8 +48,9 @@ test('old v3 state is intentionally ignored by the v4 state loader',()=>{
   assert.equal(loadUiState(storage).lastTask,'');
 });
 
-test('mobile and low-memory devices select constrained behavior',()=>{
-  assert.equal(isConstrainedDevice({userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)'}),true);
-  assert.equal(isConstrainedDevice({userAgent:'Desktop',deviceMemory:2}),true);
-  assert.equal(isConstrainedDevice({userAgent:'Desktop',deviceMemory:16}),false);
+test('mobile, low-memory, and no-WebGPU browsers select constrained behavior',()=>{
+  assert.equal(isConstrainedDevice({userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)',gpu:{}}),true);
+  assert.equal(isConstrainedDevice({userAgent:'Desktop',deviceMemory:2,gpu:{}}),true);
+  assert.equal(isConstrainedDevice({userAgent:'Desktop',deviceMemory:16}),true);
+  assert.equal(isConstrainedDevice({userAgent:'Desktop',deviceMemory:16,gpu:{}}),false);
 });
