@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACTIVE_CHAT_KEY,CHAT_SWITCH_KEY,UI_STATE_KEY,compareChats,finishChatTransition,forkChat,isChatTransitioning,listChats,newChat,restoreChat,snapshotChat } from '../web/conversation-store.js';
+import { ACTIVE_CHAT_KEY,CHAT_SWITCH_KEY,UI_STATE_KEY,branchLineage,branchTree,compareChats,finishChatTransition,forkChat,isChatTransitioning,listChats,newChat,restoreChat,snapshotChat } from '../web/conversation-store.js';
 
 function storage(){const m=new Map();return{getItem:k=>m.has(k)?m.get(k):null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k),dump:()=>m}}
 const state=(text,result='',run='r',score=.8,attempts=1)=>({version:4,view:'chat',activeRunId:run,lastTask:text,runStatus:'completed',statusText:'done',messages:[{role:'user',text,runId:null},{role:'agent',text:result||`answer ${text}`,runId:run}],events:[{id:`e-${run}`,runId:run,type:'run:done',summary:`done ${text}`}],result:{runId:run,output:result||`answer ${text}`,score,attempts,provider:'browser',changedFiles:[],diff:''},options:{workspace:'.',maxDepth:2,maxChildren:2,retries:1}});
@@ -36,6 +36,26 @@ test('branch comparison uses stored outcomes without mutating either timeline',(
   const s=storage(),session=storage(),parent=state('improve system','parent result','parent-run',.8,2);s.setItem(ACTIVE_CHAT_KEY,'parent');s.setItem(UI_STATE_KEY,JSON.stringify(parent));snapshotChat(s,parent,'parent');const branch=forkChat(s,'parent',session);finishChatTransition(session);
   const improved=state('improve system','branch result','branch-run',.92,1);s.setItem(ACTIVE_CHAT_KEY,branch.id);s.setItem(UI_STATE_KEY,JSON.stringify(improved));snapshotChat(s,improved,branch.id);
   const c=compareChats(s,branch.id,'parent');assert.equal(c.left.score,.92);assert.equal(c.right.score,.8);assert.ok(c.scoreDelta>.11);assert.equal(c.attemptDelta,-1);assert.equal(listChats(s).find(x=>x.id==='parent').state.result.output,'parent result');
+});
+
+test('branch tree is stable, layered, and ordered by fork time without mutating snapshots',()=>{
+  const base=state('root','root result','root-run',.8,1),rows=[
+    {id:'child-b',title:'B',createdAt:30,updatedAt:30,forkedAt:30,parentId:'root',rootId:'root',state:state('b','b result','b-run',.82,1)},
+    {id:'root',title:'Root',createdAt:10,updatedAt:10,parentId:null,rootId:'root',state:base},
+    {id:'grandchild',title:'Grand',createdAt:40,updatedAt:40,forkedAt:40,parentId:'child-a',rootId:'root',state:state('g','g result','g-run',.9,1)},
+    {id:'child-a',title:'A',createdAt:20,updatedAt:20,forkedAt:20,parentId:'root',rootId:'root',state:state('a','a result','a-run',.85,1)}
+  ],before=JSON.stringify(rows);const tree=branchTree(rows);
+  assert.deepEqual(tree.map(x=>[x.id,x.depth]),[['root',0],['child-a',1],['grandchild',2],['child-b',1]]);assert.equal(JSON.stringify(rows),before);
+});
+
+test('branch lineage returns ancestors and descendants for path highlighting',()=>{
+  const rows=[
+    {id:'root',title:'Root',createdAt:1,state:state('root')},
+    {id:'a',title:'A',createdAt:2,forkedAt:2,parentId:'root',rootId:'root',state:state('a')},
+    {id:'b',title:'B',createdAt:3,forkedAt:3,parentId:'a',rootId:'root',state:state('b')},
+    {id:'c',title:'C',createdAt:4,forkedAt:4,parentId:'root',rootId:'root',state:state('c')}
+  ];
+  assert.deepEqual(branchLineage(rows,'a'),{ancestors:['root'],descendants:['b']});assert.deepEqual(branchLineage(rows,'b'),{ancestors:['a','root'],descendants:[]});
 });
 
 test('missing chat does not disturb current state or arm a transition',()=>{
