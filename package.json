@@ -1,7 +1,7 @@
 {
   "name": "xrai-agent",
-  "version": "0.3.15",
-  "description": "Zero-install recursive AI agent with evidence-gated skill evolution, adaptive orchestration, grounded browser tools, durable multi-chat memory, repo execution, CLI, control room, and MCP.",
+  "version": "0.3.16",
+  "description": "Zero-install recursive AI agent with evidence-gated skill and orchestration evolution, adaptive agents, grounded browser tools, durable multi-chat memory, repo execution, CLI, control room, and MCP.",
   "type": "module",
   "bin": {
     "xrai": "src/cli.js"
@@ -12,7 +12,7 @@
     "web": "node src/cli.js web",
     "mcp": "node src/cli.js mcp",
     "test": "node --test test/*.test.js",
-    "check": "node --check src/*.js && node --check web/app.js && node --check web/local-agent.js && node --check web/orchestration-policy.js && node --check web/capability-tools.js && node --check web/web-search.js && node --check web/conversation-store.js && node --check web/browser-enhancements.js && node --check web/browser-workspace.js && node --check web/input-guard.js && node --check web/event-model.js && node --check web/event-inspector.js && node --check web/improvement-guard.js && node --check web/static-runtime.js && node --check web/coi-bootstrap.js && node --check web/coi-sw.js && node --check web/state.js && npm test"
+    "check": "node --check src/*.js && node --check web/app.js && node --check web/local-agent.js && node --check web/orchestration-policy.js && node --check web/policy-inspector.js && node --check web/capability-tools.js && node --check web/web-search.js && node --check web/conversation-store.js && node --check web/browser-enhancements.js && node --check web/browser-workspace.js && node --check web/input-guard.js && node --check web/event-model.js && node --check web/event-inspector.js && node --check web/improvement-guard.js && node --check web/static-runtime.js && node --check web/coi-bootstrap.js && node --check web/coi-sw.js && node --check web/state.js && npm test"
   },
   "engines": {
     "node": ">=20"
