@@ -8,10 +8,23 @@ const base=rawBase.replace(/^http:/,'https:').replace(/\/?$/,'/');
 const artifacts='artifacts';
 const FLOW_DEADLINES={smoke:60_000,web:45_000,'chat-retry':180_000,repo:360_000};
 const flowDeadline=FLOW_DEADLINES[flow]||180_000;
-const headed=flow==='repo';
+const softwareWebGpu=flow==='chat-retry';
+const headed=flow==='repo'||softwareWebGpu;
+const launchArgs=softwareWebGpu?[
+  '--enable-unsafe-webgpu',
+  '--enable-unsafe-swiftshader',
+  '--enable-features=Vulkan',
+  '--use-angle=vulkan',
+  '--use-vulkan=swiftshader',
+  '--use-webgpu-adapter=swiftshader',
+  '--disable-vulkan-surface',
+  '--ignore-gpu-blocklist',
+  '--enable-gpu',
+  '--disable-dev-shm-usage'
+]:[];
 await fs.mkdir(artifacts,{recursive:true});
 const reportPath=`${artifacts}/live-e2e-${flow}.json`;
-const report={base,flow,browserMode:headed?'headed-xvfb':'headless',startedAt:new Date().toISOString(),phase:'starting',flows:{},consoleErrors:[],pageErrors:[],submitProbes:[],navigations:[],networkEvents:[],flowDeadlineMs:flowDeadline,lastHeartbeat:null};
+const report={base,flow,browserMode:headed?'headed-xvfb':'headless',softwareWebGpu,startedAt:new Date().toISOString(),phase:'starting',flows:{},consoleErrors:[],pageErrors:[],submitProbes:[],navigations:[],networkEvents:[],flowDeadlineMs:flowDeadline,lastHeartbeat:null};
 let browser;
 let page;
 let finished=false;
@@ -162,7 +175,7 @@ async function runRepo(){
 
 try{
   checkpoint('browser:launch');
-  browser=await chromium.launch({channel:'chrome',headless:!headed});
+  browser=await chromium.launch({channel:'chrome',headless:!headed,args:launchArgs});
   const context=await browser.newContext({viewport:{width:1440,height:1000}});
   page=await context.newPage();
   page.setDefaultTimeout(5000);
@@ -182,7 +195,11 @@ try{
   await within(page.evaluate(()=>{localStorage.clear();sessionStorage.clear()}),'clear browser state',3000);
   await page.reload({waitUntil:'domcontentloaded',timeout:60_000});
   await waitForReady(30_000);
-  report.runtime=await state().then(()=>within(page.evaluate(()=>({href:location.href,userAgent:navigator.userAgent,deviceMemory:navigator.deviceMemory??null,webgpu:Boolean(navigator.gpu),crossOriginIsolated:globalThis.crossOriginIsolated,mode:document.querySelector('#modeLabel')?.textContent?.trim()||null})),'runtime snapshot',3000));
+  report.runtime=await state().then(()=>within(page.evaluate(async()=>{
+    let webgpuAdapter=false;
+    try{webgpuAdapter=Boolean(await navigator.gpu?.requestAdapter?.())}catch{}
+    return{href:location.href,userAgent:navigator.userAgent,deviceMemory:navigator.deviceMemory??null,webgpu:Boolean(navigator.gpu),webgpuAdapter,crossOriginIsolated:globalThis.crossOriginIsolated,mode:document.querySelector('#modeLabel')?.textContent?.trim()||null};
+  }),'runtime snapshot',5000));
   checkpoint('runtime:ready');
 
   if(flow==='chat-retry')await runChatRetry();
