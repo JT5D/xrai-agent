@@ -44,7 +44,23 @@ test('failure context prioritizes file paths present in real command output',()=
 
 test('change report exposes actual before and after evidence',()=>{
   const diff=buildChangeReport([{path:'src/a.js',before:'const x=1;\nexport {x};',after:'const x=2;\nexport {x};'}]);
-  assert.match(diff,/--- src\/a\.js/);
-  assert.match(diff,/- const x=1/);
-  assert.match(diff,/\+ const x=2/);
+  assert.match(diff,/--- "a\/src\/a\.js"/);
+  assert.match(diff,/-const x=1/);
+  assert.match(diff,/\+const x=2/);
+});
+
+test('patch export keeps unified hunks and missing-newline markers intact',()=>{
+  const patch=buildChangeReport([{path:'src/a.js',before:'a',after:'b'}]);
+  assert.match(patch, /@@ -1,1 \+1,1 @@/);
+  assert.equal((patch.match(/No newline at end of file/g)||[]).length,2);
+  assert.equal(buildChangeReport([{path:'src/a.js',before:'a',after:'a'}]),'');
+  assert.throws(()=>buildChangeReport([{path:'a',before:'a'.repeat(30000),after:'b'.repeat(30000)}]),/no truncated patch/);
+});
+test('download control is inside the visible chat composer and releases its URL later',async()=>{
+  const fs=await import('node:fs/promises');
+  const html=await fs.readFile(new URL('../web/index.html',import.meta.url),'utf8');
+  const form=html.slice(html.indexOf('<form id="chatForm"'),html.indexOf('</form>'));
+  assert.match(form,/id="downloadPatch"/);assert.equal((html.match(/id="downloadPatch"/g)||[]).length,1);
+  const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
+  assert.ok(!app.includes('a.click();URL.revokeObjectURL(url);'));
 });

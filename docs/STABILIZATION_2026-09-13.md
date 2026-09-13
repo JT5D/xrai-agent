@@ -27,3 +27,9 @@ The CPU reference run `34789790346` attempted the same LFM2.5 350M q4 export wit
 Isolate inference correctness before more UI changes or another blind model swap: use a supported model-export/backend/runtime combination, compare minimal and full conversation prompts, verify chat-template/tokenization, and compare genuine WebGPU versus WASM results where both are supported. Keep the arithmetic assertion and add real multi-turn context checks. Do not hardcode a known answer, replace the failing test with a model-ready check, or call mocked responses real inference. Promote a replacement only after genuine outputs pass and mobile memory limits are measured.
 
 No further publishing or recurring experiments are authorized by this status document; it records findings only.
+
+## Portable patch export follow-up
+
+The patch exporter now writes a complete unified diff instead of a truncated display preview. Exports beyond the existing 50,000-character storage limit fail explicitly rather than producing corrupt patches. The download control is in the chat composer so mobile layouts do not hide it, and its object URL is released after the click rather than immediately.
+
+`test/patch-export.e2e.mjs` checks eight real `git apply` round trips and rendered downloads at 1440 and 390 pixels. It seeds a UI result deliberately: it does not claim model-generated repair. Run it with Playwright installed: `node test/patch-export.e2e.mjs`; pass the public app URL to verify deployment. The public default model remains an inference-quality blocker; no failed alternative model is promoted by this change.

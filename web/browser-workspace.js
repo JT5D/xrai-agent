@@ -101,11 +101,27 @@ export function buildFailureContext(files,evidence=[],limit=46_000){
 }
 function parsePatch(text){const m=String(text).match(/\{[\s\S]*\}/);if(!m)return null;try{const x=JSON.parse(m[0]);if(!Array.isArray(x.edits))x.edits=[];return x}catch{return null}}
 async function applyEdits(wc,files,edits,progress=()=>{}){let applied=0;const changed=[];for(const e of edits.slice(0,8)){if(!e?.path||typeof e.search!=='string'||typeof e.replace!=='string'||e.search===e.replace||!e.search||!files.some(f=>f.path===e.path))continue;let cur;try{cur=await wc.fs.readFile(e.path,'utf8')}catch{continue}if(!cur.includes(e.search)||cur.indexOf(e.search)!==cur.lastIndexOf(e.search)){progress(`Skipped ${e.path}: search text not found`);continue}const next=cur.replace(e.search,e.replace);await wc.fs.writeFile(e.path,next);const row=files.find(f=>f.path===e.path);if(row)row.text=next;else files.push({path:e.path,text:next});progress(`Edited ${e.path}`);changed.push({path:e.path,before:cur,after:next});applied++}return{applied,changed}}
-function changePreview(change,max=1800){
-  const a=change.before.split('\n'),b=change.after.split('\n');let start=0;while(start<a.length&&start<b.length&&a[start]===b[start])start++;let endA=a.length-1,endB=b.length-1;while(endA>=start&&endB>=start&&a[endA]===b[endB]){endA--;endB--}
-  const from=Math.max(0,start-2),toA=Math.min(a.length,endA+3),toB=Math.min(b.length,endB+3),before=a.slice(from,toA).map(x=>`- ${x}`).join('\n'),after=b.slice(from,toB).map(x=>`+ ${x}`).join('\n');return `--- ${change.path}\n${before}\n${after}`.slice(0,max)
+function changePreview({path,before,after}){
+  if(before===after)return '';
+  const lines=text=>String(text).match(/[^\n]*\n|[^\n]+$/g)||[];
+  const a=lines(before),b=lines(after);let prefix=0,suffix=0;
+  while(prefix<a.length&&prefix<b.length&&a[prefix]===b[prefix])prefix++;
+  while(suffix<a.length-prefix&&suffix<b.length-prefix&&a[a.length-1-suffix]===b[b.length-1-suffix])suffix++;
+  const from=Math.max(0,prefix-3),endA=Math.min(a.length,a.length-suffix+3),endB=Math.min(b.length,b.length-suffix+3);
+  const name=prefix=>JSON.stringify(`${prefix}/${path}`);
+  const line=(mark,text)=>mark+text+(text.endsWith('\n')?'':'\n\\ No newline at end of file\n');
+  const countA=endA-from,countB=endB-from;
+  return `diff --git ${name('a')} ${name('b')}\n--- ${name('a')}\n+++ ${name('b')}\n@@ -${countA?from+1:from},${countA} +${countB?from+1:from},${countB} @@\n`
+    +a.slice(from,prefix).map(x=>line(' ',x)).join('')
+    +a.slice(prefix,a.length-suffix).map(x=>line('-',x)).join('')
+    +b.slice(prefix,b.length-suffix).map(x=>line('+',x)).join('')
+    +a.slice(a.length-suffix,endA).map(x=>line(' ',x)).join('');
 }
-export function buildChangeReport(changes=[]){return changes.length?changes.map(change=>changePreview(change)).join('\n\n').slice(0,7000):''}
+export function buildChangeReport(changes=[]){
+  const patch=changes.map(changePreview).join('');
+  if(patch.length>50000)throw new Error('Patch exceeds the 50,000-character browser export limit; no truncated patch was exported.');
+  return patch;
+}
 
 export async function runBrowserRepoTask(task,opts={},emit=()=>{},progress=()=>{}){
   const support=browserRepoSupport();if(!support.supported)throw new Error(support.reason);

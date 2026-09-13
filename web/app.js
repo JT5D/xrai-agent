@@ -282,7 +282,7 @@ $$('.side-nav button').forEach(b=>b.addEventListener('click',()=>setView(b.datas
 $$('.back-workspace').forEach(b=>b.addEventListener('click',()=>setView('workspace')));
 $$('[data-runtime-target]').forEach(b=>b.addEventListener('click',()=>setView('runtime')));
 $('#resumeButton').addEventListener('click',resumeRecovered);
-$('#downloadPatch').addEventListener('click',()=>{if(!ui.result?.diff)return;const blob=new Blob([ui.result.diff],{type:'text/x-diff'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`xrai-${(ui.result.repo||'patch').replace(/[^a-z0-9_-]+/gi,'-')}.patch`;a.click();URL.revokeObjectURL(url);setTimeout(()=>URL.revokeObjectURL(url),1000)});
+$('#downloadPatch').addEventListener('click',()=>{if(!ui.result?.diff)return;const blob=new Blob([ui.result.diff],{type:'text/x-diff'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`xrai-${(ui.result.repo||'patch').replace(/[^a-z0-9_-]+/gi,'-')}.patch`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)});
 window.addEventListener('xrai:state-updated',()=>{ui=loadUiState(localStorage);renderAll()});
 window.addEventListener('pagehide',persist);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')persist()});
