@@ -1,32 +1,19 @@
-import { loadUiState,saveUiState } from './state.js';
 import { normalizeEvents } from './event-model.js';
 
 const SELF_IMPROVE_RE=/\b(self[- ]?improv(?:e|ement|ing)|self[- ]?fix(?:ing)?|make\s+\d+\s+improvements?|prove\s+(?:that\s+)?self[- ]?improvement|improve\s+yourself)\b/i;
 const CLAIM_RE=/\b(?:improvements? made|improved|optimized|learned|self[- ]?improved|fixed myself|retained improvement)\b/i;
-const pct=n=>Number.isFinite(Number(n))?`${Math.round(Number(n)*100)}%`:null;
 
 export function verifiedImprovementsForRun(state,runId){
-  const events=normalizeEvents(state?.events||[]).filter(e=>!runId||e.runId===runId),out=[];
-  for(const e of events){
-    if(e.type==='improvement:accept'){
-      out.push({id:e.id,type:'attempt',summary:e.summary||'Verified retry improvement',baseline:e.evidence?.baseline??e.data?.baseline,candidate:e.evidence?.candidate??e.data?.candidate,delta:e.evidence?.delta??e.data?.delta,verifier:e.evidence?.verifier??e.data?.verifier,files:(e.evidence?.changedFiles??e.data?.changedFiles??[]),retained:true,ts:e.ts});
-    }else if(e.type==='skill:promoted'){
-      out.push({id:e.id,type:'skill',summary:e.summary||'Verified skill promotion',baseline:e.evidence?.baseline??e.data?.baseline,candidate:e.evidence?.candidateScore??e.data?.candidateScore,skillId:e.data?.id,version:e.data?.version,verifier:e.data?.verified?'safe verifier':'repeated successful support',retained:true,ts:e.ts});
-    }else if(e.type==='run:done'&&Array.isArray(e.evidence?.changedFiles||e.data?.changedFiles)&&(e.evidence?.changedFiles||e.data?.changedFiles).length&&Number(e.evidence?.score??e.data?.score)>=1){
-      const files=e.evidence?.changedFiles||e.data?.changedFiles;out.push({id:e.id,type:'code',summary:`Verified sandbox change${files.length===1?'':'s'}`,candidate:1,files,verifier:'real command exit codes',retained:true,ts:e.ts});
-    }
-  }
-  const seen=new Set();return out.filter(x=>{const key=`${x.type}:${x.skillId||''}:${x.version||''}:${x.summary}:${(x.files||[]).join(',')}`;if(seen.has(key))return false;seen.add(key);return true});
-}
-
-export function formatVerifiedImprovementReport(records,requested){
-  const rows=Array.isArray(records)?records:[],n=rows.length,limit=Math.max(1,Number(requested)||n||1);
-  if(!n)return `0 verified improvements were retained in this run. I will not claim self-improvement without machine-verifiable before/after evidence. Ask me to improve the XRAI repo explicitly if you want code changes that can be tested in the sandbox.`;
-  const shown=rows.slice(0,limit).map((r,i)=>{
-    const bits=[];if(r.baseline!=null)bits.push(`baseline ${pct(r.baseline)}`);if(r.candidate!=null)bits.push(`candidate ${pct(r.candidate)}`);if(r.delta!=null)bits.push(`delta +${pct(r.delta)}`);if(r.skillId)bits.push(`${r.skillId}@v${r.version}`);if(r.files?.length)bits.push(`files: ${r.files.join(', ')}`);if(r.verifier)bits.push(`evidence: ${r.verifier}`);
-    return `${i+1}. ${r.summary}${bits.length?` — ${bits.join(' · ')}`:''}`;
+  return normalizeEvents(state?.events||[]).filter(e=>!runId||e.runId===runId).flatMap(e=>{
+    const d=e.data||{};
+    if(e.type!=='improvement:verified'||d.scope!=='sandbox'||!d.repo||!d.sha||!d.changedFiles?.length||!Array.isArray(d.commands)||!d.commands.length||!d.commands.every(c=>c.exitCode===0))return [];
+    return [{id:e.id,type:'code',summary:'Verified sandbox patch',files:d.changedFiles,repo:d.repo,sha:d.sha,verifier:'real command exit codes',retained:false,ts:e.ts}];
   });
-  return `${shown.length} verified retained improvement${shown.length===1?'':'s'}:\n\n${shown.join('\n')}\n\nOnly retained improvements backed by structured execution evidence are counted.`;
+}
+export function formatVerifiedImprovementReport(records,requested){
+  const rows=(records||[]).slice(-Math.max(1,Number(requested)||10));
+  if(!rows.length)return '0 verified improvements are available. I will not invent improvements: model scores and promotion labels alone are not execution evidence.';
+  return `${rows.length} verified sandbox patch${rows.length===1?'':'es'}:\n\n${rows.map((r,i)=>`${i+1}. ${r.repo}@${r.sha.slice(0,8)}: ${r.files.join(', ')}; ${r.verifier}`).join('\n')}\n\nThese changes were tested in an isolated browser sandbox. They were not committed, pushed, deployed, or installed into the running agent.`;
 }
 
 export function requestedImprovementCount(text=''){
@@ -35,17 +22,3 @@ export function requestedImprovementCount(text=''){
 
 export function shouldGuardImprovementClaim(userText='',agentText=''){return SELF_IMPROVE_RE.test(String(userText))&&CLAIM_RE.test(String(agentText))}
 
-function repairLatestClaim(storage=globalThis.localStorage){
-  const bubble=[...document.querySelectorAll('#messages .msg.agent .bubble p')].at(-1);if(!bubble||!CLAIM_RE.test(bubble.textContent||''))return false;
-  const state=loadUiState(storage);if(!state?.messages?.length)return false;
-  const agentIndex=[...state.messages].map((m,i)=>({m,i})).reverse().find(x=>x.m?.role==='agent')?.i;if(agentIndex==null)return false;
-  const userIndex=[...state.messages].slice(0,agentIndex).map((m,i)=>({m,i})).reverse().find(x=>x.m?.role==='user')?.i;if(userIndex==null)return false;
-  const user=state.messages[userIndex],agent=state.messages[agentIndex];if(!shouldGuardImprovementClaim(user.text,agent.text))return false;
-  const records=verifiedImprovementsForRun(state,agent.runId||state.activeRunId),replacement=formatVerifiedImprovementReport(records,requestedImprovementCount(user.text));
-  if(agent.text===replacement)return false;agent.text=replacement;saveUiState(storage,state);bubble.textContent=replacement;return true;
-}
-
-if(typeof window!=='undefined'&&typeof document!=='undefined'){
-  const install=()=>{const messages=document.querySelector('#messages');if(!messages)return;let queued=false;const check=()=>{queued=false;repairLatestClaim(window.localStorage)};const observer=new MutationObserver(()=>{if(queued)return;queued=true;queueMicrotask(check)});observer.observe(messages,{subtree:true,childList:true});queueMicrotask(check)};
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
-}

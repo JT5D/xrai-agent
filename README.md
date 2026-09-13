@@ -1,4 +1,4 @@
-# XRAI Agent v0.3.47
+# XRAI Agent v0.3.48
 
 Small, transparent recursive AI agent with **grounded runtime capabilities**, **no-key web research**, zero-install browser repo execution, and evidence-gated skill evolution.
 
@@ -81,7 +81,7 @@ Planner, worker, synthesizer, and evaluator instructions must never contaminate 
 
 Chrome built-in AI sessions are therefore isolated per role call. A final output-shape guard also suppresses evaluator-shaped JSON such as `score`, `critique`, `work_product`, and internal skill objects before they can appear as a user answer.
 
-The evaluator remains internal evidence for learning; it is not the product response.
+The evaluator supplies internal estimates, not execution proof. Browser suggestions remain candidates until a real verifier receipt exists. Sandbox patches are not committed or deployed.
 
 ## Evidence-gated learning
 

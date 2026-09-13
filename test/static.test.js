@@ -69,7 +69,7 @@ test('self-improvement claims are replaced by retained structured evidence',()=>
     {id:'a',runId:'r',type:'improvement:accept',summary:'Retry improved verified score',data:{baseline:.82,candidate:.91,delta:.09}},
     {id:'b',runId:'r',type:'skill:promoted',summary:'Promoted safer verifier',data:{id:'skill-x',version:2,baseline:.88,candidateScore:.94,verified:true}}
   ]};
-  const rows=verifiedImprovementsForRun(state,'r');assert.equal(rows.length,2);const report=formatVerifiedImprovementReport(rows,3);assert.match(report,/2 verified retained improvements/);assert.match(report,/baseline 82%/);assert.match(report,/skill-x@v2/);
+  const rows=verifiedImprovementsForRun(state,'r');assert.equal(rows.length,0);const report=formatVerifiedImprovementReport(rows,3);assert.match(report,/0 verified improvements/);
   assert.match(formatVerifiedImprovementReport([],3),/0 verified improvements/);
 });
 
@@ -117,9 +117,9 @@ test('browser guards use bounded state and scoped observers without perpetual po
   const input=await fs.readFile(new URL('../web/input-guard.js',import.meta.url),'utf8');
   const improvement=await fs.readFile(new URL('../web/improvement-guard.js',import.meta.url),'utf8');
   const capabilities=await fs.readFile(new URL('../web/capability-tools.js',import.meta.url),'utf8');
-  assert.doesNotMatch(history,/setInterval/);assert.doesNotMatch(history,/JSON\.parse\(localStorage\.getItem/);assert.match(history,/loadUiState/);assert.match(history,/saveUiState/);assert.match(history,/requestIdleCallback/);assert.match(history,/visibilitychange/);assert.match(history,/MutationObserver/);
+  assert.doesNotMatch(history,/setInterval/);assert.doesNotMatch(history,/JSON\.parse\(localStorage\.getItem/);assert.match(history,/loadUiState/);assert.match(history,/requestIdleCallback/);assert.match(history,/visibilitychange/);assert.doesNotMatch(history,/new MutationObserver/);
   assert.match(input,/loadUiState/);assert.match(input,/MAX_UI_STATE_CHARS/);assert.match(capabilities,/loadUiState/);
-  assert.match(improvement,/loadUiState/);assert.match(improvement,/saveUiState/);assert.match(improvement,/querySelector\('#messages'\)/);assert.doesNotMatch(improvement,/document\.documentElement/);assert.doesNotMatch(improvement,/characterData:true/);
+  assert.doesNotMatch(improvement,/saveUiState|MutationObserver/);assert.doesNotMatch(improvement,/document\.documentElement/);assert.doesNotMatch(improvement,/characterData:true/);
 });
 
 test('public browser has integrated zero-install repo execution',async()=>{

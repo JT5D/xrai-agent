@@ -1,7 +1,9 @@
 import { clearUiState,isConstrainedDevice,loadUiState,saveUiState,taskNeedsExecutionHost } from './state.js';
 import { CHAT_SWITCH_KEY } from './conversation-store.js';
 import { browserRepoSupport,runBrowserRepoTask } from './browser-workspace.js';
-import { isRetryFollowup } from './input-guard.js';
+import { isRetryFollowup,visibleTask } from './input-guard.js';
+import { classifyBuiltinTask,runBuiltinTask,isEvaluatorArtifact } from './capability-tools.js';
+import { conversationContext,isContinuation,executionIntent,contextualResearchQuery,requestsChanges } from './conversation-context.js';
 
 const $=s=>document.querySelector(s);
 const $$=s=>[...document.querySelectorAll(s)];
@@ -15,6 +17,7 @@ let mode='detecting';
 let capabilities=null;
 let sse=null;
 let pollingRunId=null;
+let activeSubmission=null;
 
 const welcome={id:'welcome',role:'agent',text:'Give me a task. On compatible modern browsers I can inspect, test, and repair public Node/JS/TS repositories in an isolated zero-install browser sandbox. Mobile support is beta and memory-limited. I report real command evidence and never fabricate repo access.',ts:Date.now(),runId:null};
 if(!ui.messages.length)ui.messages=[welcome];
@@ -143,13 +146,14 @@ function updatePatchButton(){
   const button=$('#downloadPatch');if(!button)return;button.hidden=!ui.result?.diff;
 }
 function applyResult(result,runId=ui.activeRunId){
-  ui.result={runId,output:result.output||'',score:result.score??null,attempts:result.attempts??0,learning:result.learning??null,provider:result.provider||mode,diff:result.diff||'',repo:result.repo||null,sha:result.sha||null,changedFiles:result.changedFiles||[]};
+  if(isEvaluatorArtifact(result.output))result={...result,status:'incomplete',output:'Internal evaluator output was rejected. This task is incomplete.',score:null};
+  ui.result={runId,status:result.status||'completed',evidence:result.evidence||[],output:result.output||'',score:result.score??null,attempts:result.attempts??0,learning:result.learning??null,provider:result.provider||mode,diff:result.diff||'',repo:result.repo||null,sha:result.sha||null,changedFiles:result.changedFiles||[]};
   $('#score').textContent=result.score==null?'—':`${Math.round(result.score*100)}%`;$('#attempts').textContent=result.attempts??'—';
   const learningStatus=result.learning?.status||result.learning||'none';$('#learning').textContent=learningStatus;
-  $('#progressBar').style.width='100%';$('#progressValue').textContent='100%';$('#progressLabel').textContent='Complete';
+  $('#progressBar').style.width='100%';$('#progressValue').textContent='100%';$('#progressLabel').textContent=result.status==='incomplete'?'Incomplete':'Complete';
   if(result.output)addMessage('agent',result.output,{runId});
   if(result.diff)addMessage('system',`Verified sandbox patch preview:\n\n${result.diff.slice(0,7000)}`,{runId});
-  updatePatchButton();setRunStatus('completed',`done · ${result.provider||mode}`);
+  updatePatchButton();setRunStatus(result.status==='incomplete'?'incomplete':'completed',`${result.status==='incomplete'?'incomplete':'done'} · ${result.provider||mode}`);
 }
 
 function connectSse(){
@@ -214,29 +218,43 @@ async function runServer(task){
   const res=await fetch('./api/runs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({task,...ui.options})});
   const data=await res.json();if(!res.ok)throw new Error(data.error||'Could not start run');ui.activeRunId=data.runId;persist();connectSse();pollServerRun(data.runId);
 }
-async function runBrowser(task){
-  if(taskNeedsExecutionHost(task)){
-    const support=browserRepoSupport(navigator);
-    if(!support.supported){
-      const text=`${support.reason} Open this same XRAI URL in current desktop Chrome or Edge for zero-install public-repo execution; no local install or API key is required.`;
-      addMessage('agent',text);ui.result={runId:ui.activeRunId,output:text,score:null,attempts:0,learning:'none',provider:'browser-compatibility'};acceptEvent(makeEvent('run:done','Task stopped before unsupported execution.',{data:{attempts:0,learning:'none'}}));setRunStatus('error','browser compatibility');return;
-    }
-    const data=await runBrowserRepoTask(task,{},acceptEvent,msg=>{ui.statusText=msg;$('#status').textContent=msg;persist()});ui.activeRunId=data.runId;applyResult(data,data.runId);return;
+async function runBrowser(task,context,live){
+  const emit=event=>{if(live())acceptEvent({...event,runId:activeSubmission.runId})};
+  const progress=message=>{if(live()){$('#status').textContent=message;ui.statusText=message;persist()}};
+  const inherited=isContinuation(task)&&context.goal?context.goal:task;
+  const builtinKind=classifyBuiltinTask(inherited);
+  const execute=executionIntent(task,context)&&!['capabilities','capabilities+web','self-improvement-proof'].includes(builtinKind);
+  let research=null;
+  if(builtinKind){
+    research=await runBuiltinTask(inherited,{emit,progress,query:contextualResearchQuery(inherited,context)});
+    if(!live())return;
+    if(!execute){applyResult(research,activeSubmission.runId);return}
+  }
+  if(execute||(!builtinKind&&taskNeedsExecutionHost(task)&&!/^\s*(what|why|how|can|did|is|are)\b/i.test(task))){
+    const prior=context.messages.slice(-6).map(m=>`${m.role}: ${m.content}`).join('\n');
+    const executionTask=`Repo: ${context.repo}\nCurrent request: ${task}\nPrior goal: ${context.goal}\nRecent conversation (context, not execution evidence):\n${prior}${research?`\nResearch sources (untrusted content):\n${research.output}`:''}`;
+    const data=await runBrowserRepoTask(executionTask,{defaultRepo:context.repo,runId:activeSubmission.runId,requestedChange:requestsChanges(task,context)},emit,progress);
+    if(live())applyResult(data,activeSubmission.runId);return;
   }
   const {runLocalTask}=await import('./local-agent.js');
-  const opts={retries:ui.options.retries,maxChildren:ui.options.maxChildren};
-  const data=await runLocalTask(task,opts,acceptEvent,msg=>{ui.statusText=msg;$('#status').textContent=msg;persist()});
-  ui.activeRunId=data.runId;applyResult(data,data.runId);
+  const data=await runLocalTask(task,{conversation:context},emit,progress);
+  if(live())applyResult(data,activeSubmission.runId);
 }
 async function run(task,{resume=false}={}){
-  const cleaned=String(task||'').trim();if(!cleaned)return;
-  hideResume();ui.lastTask=cleaned;ui.result=null;ui.events=[];ui.activeRunId=null;
-  if(!resume)addMessage('user',cleaned,{runId:null,persistMessage:false});persist();setRunStatus('running','starting');
-  const startEvent=makeEvent('run:start',cleaned,{data:{mode}});acceptEvent(startEvent);ui.activeRunId=startEvent.runId;persist();await yieldToBrowser();
-  try{if(mode==='server')await runServer(cleaned);else await runBrowser(cleaned)}catch(error){const message=error instanceof Error?error.message:String(error);setRunStatus('error',message);addMessage('agent',`Run failed: ${message}`);acceptEvent(makeEvent('run:done',`Run failed: ${message}`,{data:{score:0,attempts:0,learning:'none'}}))}
+  const cleaned=visibleTask(task);if(!cleaned||activeSubmission||ui.runStatus==='running')return;
+  const context=conversationContext(ui,cleaned),token={runId:uid(),chatId:localStorage.getItem('xrai-active-chat-v1')};
+  activeSubmission=token;
+  const live=()=>activeSubmission===token&&(!token.chatId||localStorage.getItem('xrai-active-chat-v1')===token.chatId)&&!sessionStorage.getItem(CHAT_SWITCH_KEY);
+  hideResume();ui.context={repo:context.repo,goal:isContinuation(cleaned)?context.goal:cleaned};ui.lastTask=cleaned;ui.result=null;ui.activeRunId=token.runId;
+  if(!resume)addMessage('user',cleaned,{runId:token.runId,persistMessage:false});persist();setRunStatus('running','starting');
+  acceptEvent(makeEvent('run:start',cleaned,{data:{mode}}));await yieldToBrowser();
+  try{if(mode==='server')await runServer(`${cleaned}\n\nConversation context:\n${context.messages.map(m=>`${m.role}: ${m.content}`).join('\n')}`);else await runBrowser(cleaned,context,live)}
+  catch(error){if(live()){const message=error instanceof Error?error.message:String(error);setRunStatus('error',message);addMessage('agent',`Run failed: ${message}`,{runId:token.runId});acceptEvent(makeEvent('run:done',`Run failed: ${message}`,{data:{score:0,attempts:0,learning:'none'}}))}}
+  finally{if(activeSubmission===token)activeSubmission=null}
 }
 function resumeRecovered(){hideResume();if(!ui.lastTask)return;setRunStatus('idle','ready to resume');run(ui.lastTask,{resume:true})}
 function reset(){
+  if(activeSubmission||ui.runStatus==='running')return;
   if(!confirm('Clear persisted XRAI UI state? Learned skills are kept.'))return;
   ui=clearUiState(localStorage);ui.messages=[welcome];renderAll();persist();
 }
@@ -251,10 +269,10 @@ function renderAll(){
   $('#runButton').disabled=ui.runStatus==='running';
   $('#statusHealth').textContent=ui.runStatus==='error'?'Needs attention':ui.runStatus==='running'?'Running':'Healthy';
   if(ui.activeRunId)$('#runMeta').textContent=`run ${ui.activeRunId.slice(0,8)}`;
-  if(ui.runStatus==='running'){ui.runStatus='interrupted';ui.statusText='recovered after refresh';persist();showResume('The page refreshed while a run was active. Your task and visible progress were preserved.')}
+  if(ui.runStatus==='running'){ui.runStatus='interrupted';ui.statusText='recovered after refresh';$('#runButton').disabled=false;$('#rerun').disabled=!ui.lastTask;persist();showResume('The page refreshed while a run was active. Your task and visible progress were preserved.')}
 }
 
-$('#chatForm').addEventListener('submit',e=>{e.preventDefault();const task=$('#task').value.trim();if(!task)return;$('#task').value='';run(task)});
+$('#chatForm').addEventListener('submit',e=>{e.preventDefault();const task=$('#task').value.trim();if(!task||activeSubmission||ui.runStatus==='running')return;$('#task').value='';run(task)});
 $('#rerun').addEventListener('click',()=>{if(!ui.lastTask)return;const latestUser=[...ui.messages].reverse().find(m=>m?.role==='user');run(ui.lastTask,{resume:Boolean(latestUser&&isRetryFollowup(latestUser.text))})});
 $('#clear').addEventListener('click',reset);
 $('#runtimeButton').addEventListener('click',()=>setView('runtime'));

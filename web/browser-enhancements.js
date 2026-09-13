@@ -1,93 +1,9 @@
-import { classifyBuiltinTask,isEvaluatorArtifact,runBuiltinTask } from './capability-tools.js';
 import { ACTIVE_CHAT_KEY,branchLineage,branchTree,compareChats,ensureActiveChat,forkChat,isChatTransitioning,listChats,newChat,restoreChat,snapshotChat,snapshotCurrentChat } from './conversation-store.js';
-import { isRetryFollowup,lastMeaningfulUserTask,visibleTask } from './input-guard.js';
-import { loadUiState,saveUiState } from './state.js';
+import { loadUiState } from './state.js';
 
 const $=s=>document.querySelector(s);
-const uid=()=>globalThis.crypto?.randomUUID?.()||`xrai-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
-const RETRY_PENDING_KEY='xrai-retry-pending-v1';
 const readState=()=>loadUiState(localStorage);
-const writeState=state=>{saveUiState(localStorage,state);return true};
 const runWhenIdle=fn=>{if(typeof requestIdleCallback==='function')requestIdleCallback(fn,{timeout:1200});else setTimeout(fn,0)};
-
-function appendMessage(state,role,text,runId=null){
-  const rows=Array.isArray(state.messages)?state.messages:[];
-  rows.push({id:uid(),role,text:String(text),ts:Date.now(),runId});state.messages=rows.slice(-100);
-}
-function setBusy(text){const b=$('#runButton'),s=$('#status');if(b)b.disabled=true;if(s)s.textContent=text||'working';}
-function currentState(){return readState()}
-async function executeBuiltin(task){
-  let state=currentState();
-  state.lastTask=task;state.result=null;state.events=[];state.activeRunId=null;state.runStatus='running';state.statusText='starting built-in tool';
-  appendMessage(state,'user',task,null);writeState(state);setBusy('starting built-in tool');snapshotChat(localStorage,state,ensureActiveChat(localStorage,state));
-  const emitted=[];
-  try{
-    const data=await runBuiltinTask(task,{emit:event=>{emitted.push(event);setBusy(event.name==='web_search'?'searching web':event.summary)},progress:setBusy});
-    if(!data)return false;
-    state=currentState();state.activeRunId=data.runId;state.events=emitted.slice(-500);state.result={runId:data.runId,output:data.output||'',score:data.score??null,attempts:data.attempts??1,learning:data.learning??null,provider:data.provider||'browser-tools',diff:'',repo:null,sha:null,changedFiles:[]};
-    state.runStatus='completed';state.statusText='done · browser-tools';appendMessage(state,'agent',data.output||'Completed.',data.runId);writeState(state);snapshotChat(localStorage,state);window.dispatchEvent(new Event('xrai:state-updated'));return true;
-  }catch(error){
-    state=currentState();const message=error instanceof Error?error.message:String(error);state.events=emitted.slice(-500);state.runStatus='error';state.statusText=message;state.result={runId:state.activeRunId,output:`Web/tool execution failed: ${message}`,score:0,attempts:1,learning:'none',provider:'browser-tools'};appendMessage(state,'agent',`Web/tool execution failed: ${message}`,state.activeRunId);writeState(state);snapshotChat(localStorage,state);window.dispatchEvent(new Event('xrai:state-updated'));return true;
-  }
-}
-
-function queueRetry(task){
-  const state=currentState(),prior=lastMeaningfulUserTask(state);
-  if(!prior)return false;
-  appendMessage(state,'user',visibleTask(task),null);
-  state.lastTask=prior;
-  state.runStatus='idle';
-  state.statusText='retrying previous task';
-  writeState(state);
-  snapshotChat(localStorage,state,ensureActiveChat(localStorage,state));
-  sessionStorage.setItem(RETRY_PENDING_KEY,'1');
-  location.reload();
-  return true;
-}
-
-function installPendingRetry(){
-  const start=()=>{
-    if(sessionStorage.getItem(RETRY_PENDING_KEY)!=='1')return;
-    const deadline=performance.now()+5000;
-    const tryStart=()=>{
-      const button=$('#rerun');
-      if(button&&!button.disabled){sessionStorage.removeItem(RETRY_PENDING_KEY);button.click();return}
-      if(performance.now()<deadline){setTimeout(tryStart,50);return}
-      sessionStorage.removeItem(RETRY_PENDING_KEY);
-      const state=currentState();state.runStatus='error';state.statusText='retry could not start after app initialization';writeState(state);
-    };
-    tryStart();
-  };
-  if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',start,{once:true});
-  else start();
-}
-
-function installBuiltinRouter(){
-  document.addEventListener('submit',event=>{
-    const form=event.target;if(!(form instanceof HTMLFormElement)||form.id!=='chatForm')return;
-    const task=visibleTask($('#task')?.value||'');if(!task)return;
-    if(isRetryFollowup(task)){
-      const prior=lastMeaningfulUserTask(currentState());
-      if(!prior)return;
-      event.preventDefault();event.stopImmediatePropagation();if($('#task'))$('#task').value='';queueRetry(task);return;
-    }
-    if(!classifyBuiltinTask(task))return;
-    event.preventDefault();event.stopImmediatePropagation();if($('#task'))$('#task').value='';executeBuiltin(task);
-  },true);
-}
-
-function installLeakGuard(){
-  let repairing=false;
-  const check=()=>{
-    if(repairing)return;
-    const bubbles=document.querySelectorAll('#messages .msg.agent .bubble p');
-    const latest=bubbles[bubbles.length-1];if(!latest||!isEvaluatorArtifact(latest.textContent||''))return;
-    const state=readState();if(!state?.messages?.length)return;
-    const last=[...state.messages].reverse().find(m=>m?.role==='agent');if(!last||!isEvaluatorArtifact(last.text))return;
-    repairing=true;last.text='Internal evaluator output was blocked because it is not a valid user-facing answer. The run was marked incomplete rather than exposing internal evaluation data.';state.runStatus='error';state.statusText='internal evaluator artifact blocked';if(state.result)state.result={...state.result,output:last.text,score:0};writeState(state);snapshotChat(localStorage,state);setTimeout(()=>location.reload(),0);
-  };
-  const messages=$('#messages');if(messages)new MutationObserver(check).observe(messages,{childList:true,subtree:true});queueMicrotask(check);
-}
 
 function injectChatHistory(){
   const sidebar=document.querySelector('.sidebar');if(!sidebar||document.querySelector('#chatHistory'))return;
@@ -143,4 +59,4 @@ function installHistoryJournal(){
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flush()});
 }
 
-installPendingRetry();installBuiltinRouter();installLeakGuard();installHistoryJournal();
+installHistoryJournal();

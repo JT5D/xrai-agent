@@ -7,6 +7,7 @@ on:
       - 'web/**'
       - 'knowledge/**'
       - 'test/live-pages.e2e.mjs'
+      - 'test/conversation.e2e.mjs'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -87,7 +88,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flow: [chat-retry, mobile-chat, mobile-repo, model-runtime, web, repo]
+        flow: [conversation, chat-retry, mobile-chat, mobile-repo, model-runtime, web, repo]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -98,7 +99,9 @@ jobs:
       - name: Exercise deployed ${{ matrix.flow }} flow
         shell: bash
         run: |
-          if [ "${{ matrix.flow }}" = "repo" ] || [ "${{ matrix.flow }}" = "mobile-repo" ] || [ "${{ matrix.flow }}" = "model-runtime" ]; then
+          if [ "${{ matrix.flow }}" = "conversation" ]; then
+            node test/conversation.e2e.mjs "${{ needs.deploy.outputs.page_url }}"
+          elif [ "${{ matrix.flow }}" = "repo" ] || [ "${{ matrix.flow }}" = "mobile-repo" ] || [ "${{ matrix.flow }}" = "model-runtime" ]; then
             xvfb-run -a node test/live-pages.e2e.mjs "${{ needs.deploy.outputs.page_url }}" "${{ matrix.flow }}"
           else
             node test/live-pages.e2e.mjs "${{ needs.deploy.outputs.page_url }}" "${{ matrix.flow }}"

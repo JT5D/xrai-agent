@@ -50,8 +50,8 @@ test('browser run state crosses a paint boundary before heavyweight execution st
   const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
   assert.match(app,/const yieldToBrowser=.*requestAnimationFrame/);
   assert.match(app,/requestAnimationFrame\(\(\)=>setTimeout\(resolve,0\)\)/);
-  assert.match(app,/acceptEvent\(startEvent\);ui\.activeRunId=startEvent\.runId;persist\(\);await yieldToBrowser\(\);/);
-  assert.match(app,/try\{if\(mode==='server'\)await runServer\(cleaned\);else await runBrowser\(cleaned\)\}/);
+  assert.match(app,/acceptEvent\(makeEvent[\s\S]*?await yieldToBrowser\(\)/);
+  assert.match(app,/await runBrowser\(cleaned,context,live\)/);
 });
 
 test('X-ray observer decoration is idempotent and cannot recursively rewrite its observed subtree',async()=>{
@@ -62,33 +62,10 @@ test('X-ray observer decoration is idempotent and cannot recursively rewrite its
   assert.doesNotMatch(inspector,/more\.textContent=\[event\.type,event\.status,evidence\.join\('\\n'\)\]/);
 });
 
-test('built-in browser tools publish persisted results without reloading them away',async()=>{
-  const enhancements=await fs.readFile(new URL('../web/browser-enhancements.js',import.meta.url),'utf8');
+test('only the app owns submission and result writes',async()=>{
   const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
-  const start=enhancements.indexOf('async function executeBuiltin');
-  const end=enhancements.indexOf('function queueRetry');
-  const block=enhancements.slice(start,end);
-  assert.ok(start>=0&&end>start,'executeBuiltin block missing');
-  assert.doesNotMatch(block,/location\.reload/);
-  assert.match(block,/dispatchEvent\(new Event\('xrai:state-updated'\)\)/);
-  assert.match(app,/addEventListener\('xrai:state-updated'/);
-  assert.match(app,/ui=loadUiState\(localStorage\);renderAll\(\)/);
-});
-
-test('retry memory never rewrites the visible chat input',async()=>{
-  const guard=await fs.readFile(new URL('../web/input-guard.js',import.meta.url),'utf8');
-  const enhancements=await fs.readFile(new URL('../web/browser-enhancements.js',import.meta.url),'utf8');
-  assert.doesNotMatch(guard,/addEventListener\(['"]submit['"]/);
-  assert.doesNotMatch(guard,/input\.value\s*=\s*contextualizeFollowup/);
-  assert.match(enhancements,/isRetryFollowup/);
-  assert.match(enhancements,/lastMeaningfulUserTask/);
-  assert.match(enhancements,/appendMessage\(state,'user',visibleTask\(task\)/);
-  assert.match(enhancements,/sessionStorage\.setItem\(RETRY_PENDING_KEY/);
-});
-
-test('pending retry starts even when browser modules load after DOMContentLoaded',async()=>{
-  const enhancements=await fs.readFile(new URL('../web/browser-enhancements.js',import.meta.url),'utf8');
-  assert.match(enhancements,/document\.readyState==='loading'/);
-  assert.match(enhancements,/addEventListener\('DOMContentLoaded',start,\{once:true\}\)/);
-  assert.match(enhancements,/else start\(\)/);
+  const extra=await fs.readFile(new URL('../web/browser-enhancements.js',import.meta.url),'utf8');
+  assert.doesNotMatch(extra,/addEventListener\(['"]submit|executeBuiltin|queueRetry/);
+  assert.match(app,/await runBuiltinTask/);assert.match(app,/activeSubmission===token/);
+  assert.match(app,/conversationContext\(ui,cleaned\)/);
 });
