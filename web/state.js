@@ -9,10 +9,18 @@ const HOST_PATTERNS=[
   /\b(run|execute|verify)\b[\s\S]{0,30}\b(test|tests|build|lint|command|script)\b/i
 ];
 const CONTEXT_MARKER='\n\nPrevious XRAI context';
+const RETRY_PRIMARY=/^(?:(?:please\s+)?(?:try|do|run|execute|repeat|retry|rerun)(?:\s+(?:it|that|this|the\s+same(?:\s+thing)?))?(?:\s+again)?|(?:try|do|run)\s+that\s+again|same(?:\s+thing)?(?:\s+again)?|again|retry|rerun)[?.!]*$/i;
+
+function matchesHostTask(text=''){
+  return HOST_PATTERNS.some(pattern=>pattern.test(String(text)));
+}
 
 export function taskNeedsExecutionHost(task=''){
-  const primary=String(task).split(CONTEXT_MARKER,1)[0];
-  return HOST_PATTERNS.some(pattern=>pattern.test(primary));
+  const text=String(task),primary=text.split(CONTEXT_MARKER,1)[0].trim();
+  if(matchesHostTask(primary))return true;
+  if(!RETRY_PRIMARY.test(primary)||!text.includes(CONTEXT_MARKER))return false;
+  const prior=text.match(/\nTask:\s*([^\n]+)/i)?.[1]||'';
+  return matchesHostTask(prior);
 }
 
 export function isConstrainedDevice(nav={}){
