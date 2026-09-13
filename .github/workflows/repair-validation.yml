@@ -1,7 +1,7 @@
-name: Validate conversation repair
+name: Validate verified learning
 on:
   push:
-    branches: [repair/verified-context-20260913]
+    branches: [repair/verified-learning-0348]
 permissions:
   contents: write
 jobs:
@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Apply exact reviewed repair
+      - name: Apply reviewed conversation fixes and learning integration
         run: |
           python3 - <<'PY'
           import json,hashlib,gzip,base64
@@ -41,33 +41,34 @@ jobs:
           p=Path('package.json');data=json.loads(p.read_text());data['version']='0.3.48';p.write_text(json.dumps(data,indent=2)+'\n')
           p=Path('README.md');p.write_text(p.read_text().replace('v0.3.47','v0.3.48').replace('The evaluator remains internal evidence for learning; it is not the product response.','The evaluator supplies internal estimates, not execution proof. Browser suggestions remain candidates until a real verifier receipt exists. Sandbox patches are not committed or deployed.'))
           PY
-      - name: Source checks
+          python3 .upgrade.py
+      - name: Source and actual subprocess repair checks
         run: npm run check > source-checks.txt 2>&1
-      - name: Browser contract checks
-        if: success()
+      - name: Browser conversation and actual WebContainer repair checks
         run: |
           npm install --no-save --ignore-scripts playwright@1.55.0
           node test/conversation.e2e.mjs
-      - name: Export source and evidence
+          xvfb-run -a node test/learning.e2e.mjs
+      - name: Export evidence
         if: always()
         run: |
           mkdir -p artifacts
           cp source-checks.txt artifacts/ || true
           tar --exclude=node_modules --exclude=.git --exclude=artifacts -czf artifacts/source.tar.gz README.md package.json src web test knowledge .github
-      - name: Create tested commit without repair infrastructure
-        if: success()
+      - name: Create tested commit without temporary repair infrastructure
         run: |
           git config user.name JT5D
           git config user.email jtunick@theimclab.com
-          git rm --ignore-unmatch .repair.json .github/workflows/repair-validation.yml
-          git add README.md web test package.json .github/workflows/pages.yml
+          git rm --ignore-unmatch .repair.json .upgrade.py .github/workflows/repair-validation.yml
+          git restore --source=69c3440e4368820147de9ee8c53de6f92cc1fc08 --staged --worktree .github/workflows/pages.yml .github/workflows/ci.yml
+          git add README.md web test src knowledge package.json
           tree=$(git write-tree)
-          commit=$(printf '%s\n' 'Fix conversation context, serialized execution, research relevance and evidence integrity' | git commit-tree "$tree" -p 69c3440e4368820147de9ee8c53de6f92cc1fc08)
-          git push origin "$commit:refs/heads/repair/verified-context-tested-20260913"
+          commit=$(printf '%s\n' 'Add verified repair tools, persisted replay, rollback and conversation integrity' | git commit-tree "$tree" -p 69c3440e4368820147de9ee8c53de6f92cc1fc08)
+          git push origin "$commit:refs/heads/repair/verified-learning-tested-0348"
           printf '%s\n' "$commit" > artifacts/tested-commit.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: conversation-repair-validation
+          name: verified-learning-validation
           path: artifacts/
           retention-days: 7
