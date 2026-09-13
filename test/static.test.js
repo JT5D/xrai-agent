@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import { extractEval,selectBrowserModelProfile } from '../web/local-agent.js';
+import { compoundingMetrics,extractEval,selectBrowserModelProfile } from '../web/local-agent.js';
 import { formatVerifiedImprovementReport,requestedImprovementCount,shouldGuardImprovementClaim,verifiedImprovementsForRun } from '../web/improvement-guard.js';
 
 test('static Pages build has no-key local inference and evidence-gated skill learning',async()=>{
@@ -18,6 +18,16 @@ test('browser evaluator parse failure is fail-closed and cannot promote learning
 test('browser evaluator caps learning when execution path quality is poor',()=>{
   const ev=extractEval('{"score":0.95,"pathScore":0.4,"critique":"good answer","pathCritique":"weak evidence","skill":{"title":"","trigger":"","procedure":"","verifier":"","tags":[]}}');
   assert.equal(ev.score,.95);assert.equal(ev.pathScore,.4);assert.equal(ev.compositeScore,.55);
+});
+
+test('compounding metrics expose transfer and repair efficiency from existing run records',()=>{
+  const m=compoundingMetrics([
+    {score:.9,pathScore:.88,attempts:1,skillRefs:['skill-a@1']},
+    {score:.86,pathScore:.84,attempts:2,skillRefs:['skill-a@1']},
+    {score:.78,pathScore:.76,attempts:1,skillRefs:[]},
+    {score:.8,pathScore:.79,attempts:2,skillRefs:[]}
+  ]);
+  assert.equal(m.skillRuns,2);assert.equal(m.noSkillRuns,2);assert.ok(m.observedSkillLift>.08);assert.equal(m.repairRuns,2);assert.equal(m.repairSuccessRate,.5);assert.equal(m.avgAttempts,1.5);assert.ok(m.avgPathScore>.8);
 });
 
 test('self-improvement claims are replaced by retained structured evidence',()=>{
