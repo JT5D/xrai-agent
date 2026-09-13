@@ -6,7 +6,7 @@ const rawBase=process.argv[2]||process.env.XRAI_LIVE_URL||'https://jt5d.github.i
 const flow=process.argv[3]||process.env.XRAI_E2E_FLOW||'smoke';
 const base=rawBase.replace(/^http:/,'https:').replace(/\/?$/,'/');
 const artifacts='artifacts';
-const FLOW_DEADLINES={smoke:60_000,web:45_000,'chat-retry':60_000,'mobile-chat':60_000,'mobile-repo':360_000,'model-runtime':90_000,repo:360_000};
+const FLOW_DEADLINES={smoke:60_000,web:45_000,'chat-retry':60_000,'mobile-chat':60_000,'mobile-repo':360_000,'model-runtime':180_000,repo:360_000};
 const flowDeadline=FLOW_DEADLINES[flow]||180_000;
 const mobileChat=flow==='mobile-chat';
 const mobileRepo=flow==='mobile-repo';
@@ -165,7 +165,7 @@ async function runMobileRepo(){
 
 async function runModelRuntime(){
   checkpoint('model-runtime:start');
-  const task='Reply with OK.';
+  const task='What is 2 + 2? Reply with only the number.';
   await waitForReady();
   await within(page.locator('#task').fill(task,{timeout:5000}),'fill model smoke task',6000);
   await within(page.locator('#runButton').click({noWaitAfter:true,timeout:5000}),'model smoke click',6000);
@@ -183,7 +183,9 @@ async function runModelRuntime(){
   require(ready,'real local model emitted no model:ready event');
   require(/SmolLM2|LFM/i.test(String(ready.summary||'')),`unexpected real local model: ${ready.summary||'none'}`);
   require(report.networkEvents.some(e=>/huggingface\.co\/.*model_q4/i.test(e.url)),'real local model smoke saw no q4 model fetch');
-  report.flows.modelRuntime={ok:true,model:ready.summary,webgpuAdapter:report.runtime?.webgpuAdapter,crossOriginIsolated:report.runtime?.crossOriginIsolated};
+  const finished=await waitForNewResult(null,110_000);
+  require(finished.runStatus==='completed'&&/\b4\b/.test(finished.result?.output||''),'real model did not complete a correct response');
+  report.flows.modelRuntime={ok:true,output:finished.result.output,model:ready.summary,webgpuAdapter:report.runtime?.webgpuAdapter,crossOriginIsolated:report.runtime?.crossOriginIsolated};
   checkpoint('model-runtime:ready');
 }
 
