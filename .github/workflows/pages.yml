@@ -1,12 +1,9 @@
 name: Deploy XRAI Agent Pages
 
+# One-time prerequisite: in GitHub Settings > Pages, set Source to GitHub Actions.
+# After that, run this workflow manually. Keeping deploy manual avoids a permanent
+# failing check while Pages is disabled and prevents source/deployment drift.
 on:
-  push:
-    branches: [master]
-    paths:
-      - 'web/**'
-      - 'knowledge/**'
-      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
@@ -28,8 +25,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - name: Build static Pages artifact
         run: |
           mkdir -p _site
