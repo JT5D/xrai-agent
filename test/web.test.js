@@ -41,3 +41,10 @@ test('retry memory never rewrites the visible chat input',async()=>{
   assert.match(enhancements,/appendMessage\(state,'user',visibleTask\(task\)/);
   assert.match(enhancements,/sessionStorage\.setItem\(RETRY_PENDING_KEY/);
 });
+
+test('pending retry starts even when browser modules load after DOMContentLoaded',async()=>{
+  const enhancements=await fs.readFile(new URL('../web/browser-enhancements.js',import.meta.url),'utf8');
+  assert.match(enhancements,/document\.readyState==='loading'/);
+  assert.match(enhancements,/addEventListener\('DOMContentLoaded',start,\{once:true\}\)/);
+  assert.match(enhancements,/else start\(\)/);
+});
