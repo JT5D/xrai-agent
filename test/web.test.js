@@ -31,6 +31,14 @@ test('web UI exposes durable recovery, zero-install repo execution, and patch do
   assert.doesNotMatch(html,/repo-runtime\.js/);
 });
 
+test('public composer stays inert until app initialization owns form submission',async()=>{
+  const html=await fs.readFile(new URL('../web/index.html',import.meta.url),'utf8');
+  const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
+  assert.match(html,/<button id="runButton" type="submit" disabled>/);
+  assert.match(app,/#chatForm'\)\.addEventListener\('submit'/);
+  assert.match(app,/\$\('#runButton'\)\.disabled=ui\.runStatus==='running'/);
+});
+
 test('retry memory never rewrites the visible chat input',async()=>{
   const guard=await fs.readFile(new URL('../web/input-guard.js',import.meta.url),'utf8');
   const enhancements=await fs.readFile(new URL('../web/browser-enhancements.js',import.meta.url),'utf8');
