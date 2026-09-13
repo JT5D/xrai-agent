@@ -15,10 +15,12 @@ test('web UI ships reference-style orchestration, chat, status, activity, skills
 
 test('web UI exposes durable refresh recovery and truthful capability messaging',async()=>{
   const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
+  const runtime=await fs.readFile(new URL('../web/repo-runtime.js',import.meta.url),'utf8');
   const html=await fs.readFile(new URL('../web/index.html',import.meta.url),'utf8');
   assert.match(app,/xrai-ui-v3|loadUiState/);
   assert.match(app,/taskNeedsExecutionHost/);
-  assert.match(app,/Repo\/filesystem\/test execution requires a connected execution host/);
+  assert.match(runtime,/runBrowserRepoTask/);
+  assert.match(runtime,/zero-install public-repo execution|WebContainer/i);
   assert.match(html,/Run recovered after a page reload/);
-  assert.match(html,/No filesystem, shell, or private repo access/);
+  assert.match(html,/No key or install|public Node repo execution/i);
 });
