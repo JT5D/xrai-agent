@@ -1,3 +1,4 @@
+import { loadUiState } from './state.js';
 import { formatWebResults,searchWeb } from './web-search.js';
 
 const CAPABILITY_RE=/\b(capabilit(?:y|ies)|what can (?:you|it|xrai)|can (?:you|it|xrai)|features?|tools?)\b/i;
@@ -8,7 +9,6 @@ const SELF_IMPROVE_PROOF_RE=/\b(show|list|report|summari[sz]e|what|which|evidenc
 const SELF_IMPROVE_ACTION_RE=/\b(make|making|do|perform|implement|apply|fix|improve|refactor|change|update)\b[\s\S]{0,80}\b(?:\d+\s+)?(?:self[- ]?improvements?|improvements?|fixes?|changes?|yourself|xrai)\b/i;
 const EVAL_KEYS=new Set(['score','critique','work_product','skills','missing_elements']);
 const CONTEXT_MARKER='\n\nPrevious XRAI context';
-const UI_STATE_KEY='xrai-ui-v4';
 
 export const CAPABILITIES=[
   ['On-device chat/reasoning','Runs locally in supported browsers; no user model API key required.'],
@@ -54,8 +54,7 @@ export function isEvaluatorArtifact(text=''){
 }
 
 function improvementEvidenceFromState(storage=globalThis.localStorage){
-  let state;try{state=JSON.parse(storage?.getItem(UI_STATE_KEY)||'null')}catch{return[]}
-  const rows=Array.isArray(state?.events)?state.events:[],out=[];
+  const state=loadUiState(storage),rows=Array.isArray(state?.events)?state.events:[],out=[];
   for(const e of rows.slice(-300)){
     if(e?.type==='improvement:accept')out.push({summary:e.summary||'Verified retry improvement',baseline:e.data?.baseline??e.evidence?.baseline,candidate:e.data?.candidate??e.evidence?.candidate,delta:e.data?.delta??e.evidence?.delta,evidence:(e.data?.verifier??e.evidence?.verifier??'structured improvement event')});
     else if(e?.type==='skill:promoted')out.push({summary:e.summary||'Verified skill promotion',baseline:e.data?.baseline??e.evidence?.baseline,candidate:e.data?.candidateScore??e.evidence?.candidateScore,evidence:e.data?.verified?'safe verifier':'repeated successful support',skill:e.data?.id&&e.data?.version?`${e.data.id}@v${e.data.version}`:null});
