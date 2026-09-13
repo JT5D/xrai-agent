@@ -1,0 +1,63 @@
+name: Validate proof query routing
+on:
+  push:
+    branches: [repair/proof-routing-check]
+permissions:
+  contents: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 550d3bbc38d45eb739f43cf427169f104e02aec3
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-save --ignore-scripts playwright@1.55.0
+      - name: Add exact reply assertion and reproduce failure
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('test/conversation.e2e.mjs');s=p.read_text()
+          old="    await send('did self improvements happen?');"
+          assert s.count(old)==1
+          p.write_text(s.replace(old,"    const proof=await send('did self improvements happen?');\n    assert.match(proof.result.output,/^0 verified improvements/,'proof questions must not rerun the prior search');"))
+          PY
+          if node test/conversation.e2e.mjs > before-proof.txt 2>&1; then
+            echo 'Expected proof routing regression did not reproduce' >&2
+            exit 1
+          fi
+          grep -q 'proof questions must not rerun the prior search' before-proof.txt
+      - name: Fix inherited-tool selection and verify
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('web/app.js');s=p.read_text()
+          old='const inherited=isContinuation(task)&&context.goal?context.goal:task;'
+          assert s.count(old)==1
+          p.write_text(s.replace(old,'const inherited=isRetryFollowup(task)&&context.goal?context.goal:task;'))
+          PY
+          npm run check > source-checks.txt 2>&1
+          node test/conversation.e2e.mjs
+      - name: Publish only tested source to isolated branch
+        run: |
+          git config user.name JT5D
+          git config user.email jtunick@theimclab.com
+          git add web/app.js test/conversation.e2e.mjs
+          git commit -m 'Route proof questions directly instead of repeating prior research'
+          git push origin HEAD:refs/heads/repair/proof-routing-tested
+          git rev-parse HEAD > artifacts/tested-commit.txt
+      - name: Collect evidence
+        if: always()
+        run: |
+          mkdir -p artifacts
+          cp before-proof.txt source-checks.txt artifacts/ || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: proof-routing-validation
+          path: artifacts/
+          retention-days: 7
