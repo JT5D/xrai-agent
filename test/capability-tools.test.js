@@ -31,6 +31,18 @@ test('web search executes multiple no-key providers and returns source URLs',asy
   assert.ok(result.results.some(x=>x.source==='Wikipedia'));
 });
 
+test('web search bounds stalled provider body reads, not only response headers',async()=>{
+  const stalledFetch=url=>{
+    if(String(url).includes('search.jina.ai'))return Promise.resolve({ok:true,status:200,text:()=>new Promise(()=>{}),json:async()=>({})});
+    return mockFetch(url);
+  };
+  const started=Date.now();
+  const result=await searchWeb('bounded provider test',{fetchFn:stalledFetch,limit:6,providerTimeoutMs:25});
+  assert.ok(Date.now()-started<500,'stalled provider escaped the whole-operation deadline');
+  assert.ok(result.results.length>=3);
+  assert.ok(result.errors.some(x=>/jina.*timed out/i.test(x)));
+});
+
 test('exact bad capability prompt executes a grounded capability answer rather than model planning',async()=>{
   const events=[];
   const result=await runBuiltinTask('what are all agent capabilities? can it search the web? if not add this skill & ensure it is state of art & fast',{fetchFn:mockFetch,emit:e=>events.push(e)});
