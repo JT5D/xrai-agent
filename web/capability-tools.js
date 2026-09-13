@@ -4,8 +4,10 @@ const CAPABILITY_RE=/\b(capabilit(?:y|ies)|what can (?:you|it|xrai)|can (?:you|i
 const WEB_RE=/\b(web search|search the web|search online|search the internet|look up online|research online|internet search)\b/i;
 const FRESH_RE=/\b(latest|current|today|recent|up[- ]?to[- ]?date|this week|this month)\b/i;
 const ADD_WEB_RE=/\b(add|create|install|enable|implement)\b[\s\S]{0,80}\b(web search|search skill|internet search)\b/i;
+const SELF_IMPROVE_RE=/\b(self[- ]?improv(?:e|ement|ing)|self[- ]?fix(?:ing)?|make\s+\d+\s+improvements?|prove\s+(?:that\s+)?self[- ]?improvement|improve\s+yourself)\b/i;
 const EVAL_KEYS=new Set(['score','critique','work_product','skills','missing_elements']);
 const CONTEXT_MARKER='\n\nPrevious XRAI context';
+const UI_STATE_KEY='xrai-ui-v4';
 
 export const CAPABILITIES=[
   ['On-device chat/reasoning','Runs locally in supported browsers; no user model API key required.'],
@@ -22,9 +24,8 @@ export const CAPABILITIES=[
 
 export function classifyBuiltinTask(task=''){
   const text=String(task).split(CONTEXT_MARKER,1)[0].trim();
-  const asksCapabilities=CAPABILITY_RE.test(text);
-  const asksWeb=WEB_RE.test(text);
-  const asksAddWeb=ADD_WEB_RE.test(text);
+  if(SELF_IMPROVE_RE.test(text))return'self-improvement-proof';
+  const asksCapabilities=CAPABILITY_RE.test(text),asksWeb=WEB_RE.test(text),asksAddWeb=ADD_WEB_RE.test(text);
   const needsFresh=FRESH_RE.test(text)&&/\b(find|search|research|news|status|version|release|best|popular|state of the art|repo|github)\b/i.test(text);
   if(asksCapabilities&&(asksWeb||asksAddWeb))return'capabilities+web';
   if(asksCapabilities)return'capabilities';
@@ -51,11 +52,31 @@ export function isEvaluatorArtifact(text=''){
   try{const value=JSON.parse(raw);const keys=Object.keys(value);return keys.some(k=>EVAL_KEYS.has(k))&&(keys.includes('score')||keys.includes('critique'))}catch{return false}
 }
 
-export async function runBuiltinTask(task,{emit=()=>{},progress=()=>{},fetchFn=globalThis.fetch}={}){
+function improvementEvidenceFromState(storage=globalThis.localStorage){
+  let state;try{state=JSON.parse(storage?.getItem(UI_STATE_KEY)||'null')}catch{return[]}
+  const rows=Array.isArray(state?.events)?state.events:[],out=[];
+  for(const e of rows.slice(-300)){
+    if(e?.type==='improvement:accept')out.push({summary:e.summary||'Verified retry improvement',baseline:e.data?.baseline??e.evidence?.baseline,candidate:e.data?.candidate??e.evidence?.candidate,delta:e.data?.delta??e.evidence?.delta,evidence:e.data?.verifier??e.evidence?.verifier||'structured improvement event'});
+    else if(e?.type==='skill:promoted')out.push({summary:e.summary||'Verified skill promotion',baseline:e.data?.baseline??e.evidence?.baseline,candidate:e.data?.candidateScore??e.evidence?.candidateScore,evidence:e.data?.verified?'safe verifier':'repeated successful support',skill:e.data?.id&&e.data?.version?`${e.data.id}@v${e.data.version}`:null});
+  }
+  return out.slice(-10);
+}
+function requestedCount(task=''){const m=String(task).match(/\b(\d+)\s+improvements?\b/i);return m?Math.max(1,Math.min(10,Number(m[1]))):3}
+function improvementProofText(task,storage=globalThis.localStorage){
+  const requested=requestedCount(task),rows=improvementEvidenceFromState(storage).slice(-requested);
+  if(!rows.length)return `0 verified improvements are available as evidence for this request. I will not invent improvements. In public browser mode, ask me to improve the XRAI repo explicitly when you want code changes that can be executed and tested in the sandbox.`;
+  const fmt=n=>Number.isFinite(Number(n))?`${Math.round(Number(n)*100)}%`:null;
+  return `${rows.length} verified retained improvement${rows.length===1?'':'s'} found in structured XRAI state:\n\n${rows.map((r,i)=>{const bits=[];if(r.baseline!=null)bits.push(`baseline ${fmt(r.baseline)}`);if(r.candidate!=null)bits.push(`candidate ${fmt(r.candidate)}`);if(r.delta!=null)bits.push(`delta +${fmt(r.delta)}`);if(r.skill)bits.push(r.skill);if(r.evidence)bits.push(`evidence: ${r.evidence}`);return `${i+1}. ${r.summary}${bits.length?` — ${bits.join(' · ')}`:''}`}).join('\n')}\n\nThese are reported from retained events, not model-authored claims.`;
+}
+
+export async function runBuiltinTask(task,{emit=()=>{},progress=()=>{},fetchFn=globalThis.fetch,storage=globalThis.localStorage}={}){
   const kind=classifyBuiltinTask(task);if(!kind)return null;
   const runId=globalThis.crypto?.randomUUID?.()||`xrai-${Date.now().toString(36)}`;
   const event=(type,summary,meta={})=>emit({id:globalThis.crypto?.randomUUID?.()||`${runId}-${Math.random()}`,runId,ts:new Date().toISOString(),type,summary,...meta});
   event('run:start',task,{data:{provider:'browser-tools'}});
+  if(kind==='self-improvement-proof'){
+    const output=improvementProofText(task,storage);const count=(output.match(/^\d+/)||['0'])[0];event('tool:done',`${count} retained improvement records found`,{name:'improvement_evidence',data:{count:Number(count)}});event('run:done',output.slice(0,1200),{data:{score:1,attempts:1,provider:'browser-tools',learning:'evidence-only'}});return{runId,output,score:1,attempts:1,provider:'browser-tools',learning:{status:'evidence-only'}};
+  }
   if(kind==='capabilities'){
     const output=capabilityText();event('tool:done','Grounded runtime capability inventory',{name:'capabilities',data:{count:CAPABILITIES.length}});event('run:done',output.slice(0,1200),{data:{score:1,attempts:1,provider:'browser-tools'}});return{runId,output,score:1,attempts:1,provider:'browser-tools',learning:{status:'none'}};
   }
