@@ -11,7 +11,7 @@ export function verifiedImprovementsForRun(state,runId){
   const events=normalizeEvents(state?.events||[]).filter(e=>!runId||e.runId===runId),out=[];
   for(const e of events){
     if(e.type==='improvement:accept'){
-      out.push({id:e.id,type:'attempt',summary:e.summary||'Verified retry improvement',baseline:e.evidence?.baseline??e.data?.baseline,candidate:e.evidence?.candidate??e.data?.candidate,delta:e.evidence?.delta??e.data?.delta,verifier:e.evidence?.verifier??e.data?.verifier,files:e.evidence?.changedFiles??e.data?.changedFiles||[],retained:true,ts:e.ts});
+      out.push({id:e.id,type:'attempt',summary:e.summary||'Verified retry improvement',baseline:e.evidence?.baseline??e.data?.baseline,candidate:e.evidence?.candidate??e.data?.candidate,delta:e.evidence?.delta??e.data?.delta,verifier:e.evidence?.verifier??e.data?.verifier,files:(e.evidence?.changedFiles??e.data?.changedFiles??[]),retained:true,ts:e.ts});
     }else if(e.type==='skill:promoted'){
       out.push({id:e.id,type:'skill',summary:e.summary||'Verified skill promotion',baseline:e.evidence?.baseline??e.data?.baseline,candidate:e.evidence?.candidateScore??e.data?.candidateScore,skillId:e.data?.id,version:e.data?.version,verifier:e.data?.verified?'safe verifier':'repeated successful support',retained:true,ts:e.ts});
     }else if(e.type==='run:done'&&Array.isArray(e.evidence?.changedFiles||e.data?.changedFiles)&&(e.evidence?.changedFiles||e.data?.changedFiles).length&&Number(e.evidence?.score??e.data?.score)>=1){
