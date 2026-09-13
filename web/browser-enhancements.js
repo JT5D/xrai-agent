@@ -1,5 +1,5 @@
 import { classifyBuiltinTask,isEvaluatorArtifact,runBuiltinTask } from './capability-tools.js';
-import { ACTIVE_CHAT_KEY,UI_STATE_KEY,ensureActiveChat,listChats,newChat,restoreChat,snapshotChat,snapshotCurrentChat } from './conversation-store.js';
+import { ACTIVE_CHAT_KEY,UI_STATE_KEY,ensureActiveChat,isChatTransitioning,listChats,newChat,restoreChat,snapshotChat,snapshotCurrentChat } from './conversation-store.js';
 import { isRetryFollowup,lastMeaningfulUserTask,visibleTask } from './input-guard.js';
 
 const $=s=>document.querySelector(s);
@@ -102,19 +102,19 @@ function injectChatHistory(){
   `;document.head.append(style);
   const wrap=document.createElement('section');wrap.id='chatHistory';wrap.className='chat-history';wrap.innerHTML='<div class="chat-history-head"><strong>Chats</strong><button class="chat-new" type="button">+ New</button></div><div class="chat-history-list"></div>';
   const agent=sidebar.querySelector('.agent-card');sidebar.insertBefore(wrap,agent||null);
-  wrap.querySelector('.chat-new').addEventListener('click',()=>{newChat(localStorage);location.reload()});
+  wrap.querySelector('.chat-new').addEventListener('click',()=>{if(newChat(localStorage,sessionStorage))location.reload()});
   renderChatHistory();
 }
 function renderChatHistory(){
   const list=document.querySelector('.chat-history-list');if(!list)return;list.innerHTML='';const active=localStorage.getItem(ACTIVE_CHAT_KEY),rows=listChats(localStorage);
-  for(const row of rows.slice(0,10)){const button=document.createElement('button');button.type='button';button.className=`chat-history-item${row.id===active?' active':''}`;button.title=row.title;button.textContent=row.title;const time=document.createElement('span');time.className='chat-history-time';time.textContent=new Date(row.updatedAt||Date.now()).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});button.append(time);button.addEventListener('click',()=>{if(row.id===active)return;if(restoreChat(localStorage,row.id))location.reload()});list.append(button)}
+  for(const row of rows.slice(0,10)){const button=document.createElement('button');button.type='button';button.className=`chat-history-item${row.id===active?' active':''}`;button.title=row.title;button.textContent=row.title;const time=document.createElement('span');time.className='chat-history-time';time.textContent=new Date(row.updatedAt||Date.now()).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});button.append(time);button.addEventListener('click',()=>{if(row.id===active)return;if(restoreChat(localStorage,row.id,sessionStorage))location.reload()});list.append(button)}
   if(!rows.length){const empty=document.createElement('span');empty.className='chat-history-item';empty.textContent='Current chat';list.append(empty)}
 }
 function installHistoryJournal(){
   const initial=readState();ensureActiveChat(localStorage,initial);if(initial)snapshotChat(localStorage,initial);injectChatHistory();
   let lastStamp=initial?.updatedAt||0;
-  setInterval(()=>{const state=readState();if(!state||state.updatedAt===lastStamp)return;lastStamp=state.updatedAt;snapshotChat(localStorage,state);renderChatHistory()},800);
-  window.addEventListener('pagehide',()=>snapshotCurrentChat(localStorage));
+  setInterval(()=>{if(isChatTransitioning(sessionStorage))return;const state=readState();if(!state||state.updatedAt===lastStamp)return;lastStamp=state.updatedAt;snapshotChat(localStorage,state);renderChatHistory()},800);
+  window.addEventListener('pagehide',()=>{if(!isChatTransitioning(sessionStorage))snapshotCurrentChat(localStorage)});
 }
 
 installPendingRetry();installBuiltinRouter();installLeakGuard();installHistoryJournal();
