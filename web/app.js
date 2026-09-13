@@ -1,4 +1,5 @@
 import { clearUiState,isConstrainedDevice,loadUiState,saveUiState,taskNeedsExecutionHost } from './state.js';
+import { CHAT_SWITCH_KEY } from './conversation-store.js';
 import { browserRepoSupport,runBrowserRepoTask } from './browser-workspace.js';
 
 const $=s=>document.querySelector(s);
@@ -6,6 +7,7 @@ const $$=s=>[...document.querySelectorAll(s)];
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const uid=()=>globalThis.crypto?.randomUUID?.()||`xrai-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
 let ui=loadUiState(localStorage);
+try{if(sessionStorage.getItem(CHAT_SWITCH_KEY))sessionStorage.removeItem(CHAT_SWITCH_KEY)}catch{}
 let mode='detecting';
 let capabilities=null;
 let sse=null;
@@ -14,7 +16,7 @@ let pollingRunId=null;
 const welcome={id:'welcome',role:'agent',text:'Give me a task. On compatible desktop browsers I can inspect, test, and repair public Node/JS/TS repositories in an isolated zero-install browser sandbox. I report real command evidence and never fabricate repo access.',ts:Date.now(),runId:null};
 if(!ui.messages.length)ui.messages=[welcome];
 
-function persist(){ui=saveUiState(localStorage,ui)}
+function persist(){try{if(sessionStorage.getItem(CHAT_SWITCH_KEY))return}catch{}ui=saveUiState(localStorage,ui)}
 function escTime(ts){try{return new Date(ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}catch{return''}}
 function makeEvent(type,summary,extra={}){return{id:uid(),runId:ui.activeRunId||uid(),ts:Date.now(),type,summary,...extra}}
 function activeEvents(){return ui.events.filter(e=>e.runId===ui.activeRunId)}
@@ -143,9 +145,7 @@ function applyResult(result,runId=ui.activeRunId){
   const learningStatus=result.learning?.status||result.learning||'none';$('#learning').textContent=learningStatus;
   $('#progressBar').style.width='100%';$('#progressValue').textContent='100%';$('#progressLabel').textContent='Complete';
   if(result.output)addMessage('agent',result.output,{runId});
-  if(result.diff)addMessage('system',`Verified sandbox patch preview:
-
-${result.diff.slice(0,7000)}`,{runId});
+  if(result.diff)addMessage('system',`Verified sandbox patch preview:\n\n${result.diff.slice(0,7000)}`,{runId});
   updatePatchButton();setRunStatus('completed',`done · ${result.provider||mode}`);
 }
 
@@ -188,20 +188,33 @@ function renderCapabilities(){
 }
 async function renderSkills(){
   const box=$('#skillsContent');
-  if(mode==='server')try{const res=await fetch('./api/skills',{cache:'no-store'});if(res.ok){const s=await res.json();box.innerHTML=`<div class="runtime-grid"><article><strong>${s.promoted||0} promoted</strong><p>Eligible for retrieval after passing evidence gates.</p></article><article><strong>${s.candidates||s.candidate||0} candidates</strong><p>Quarantined until enough independent evidence exists.</p></article></div>`;return}}catch{}
-  try{const rows=JSON.parse(localStorage.getItem('xrai-skills-v2')||'[]'),promoted=rows.filter(x=>x.status==='promoted').length,candidates=rows.filter(x=>x.status==='candidate').length;box.innerHTML=`<div class="runtime-grid"><article><strong>${promoted} promoted</strong><p>Stored only on this device in browser mode.</p></article><article><strong>${candidates} candidates</strong><p>Need repeated successful support before promotion.</p></article></div>`}catch{box.innerHTML='<p class="muted">No browser skill data yet.</p>'}
+  if(mode==='server')try{const res=await fetch('./api/skills',{cache:'no-store'});if(res.ok){const s=await res.json();box.innerHTML=`<div class="runtime-grid"><article><strong>${s.promoted||0} promoted</strong><p>Eligible for retrieval after passing evidence gates.</p></article><article><strong>${s.candidates||s.candidate||0} candidates</strong><p>Quarantined until verified or supported by another successful task.</p></article><article><strong>Meta v${s.meta?.version||1}</strong><p>${(s.meta?.guidance||[]).slice(-1)[0]||'Learning policy is stable.'}</p></article></div>`;return}}catch{}
+  box.innerHTML='<div class="runtime-grid"><article><strong>Browser-local learning</strong><p>Promoted skills live in browser storage and are retrieved only after evidence gates pass.</p></article><article><strong>Fail closed</strong><p>Low-confidence candidates stay quarantined; they do not automatically become memory.</p></article></div>';
 }
-function updateCapabilityNotice(){const html=capabilityMessage();const el=$('#capabilityNotice');el.hidden=!html;el.innerHTML=html}
 
-async function startServerRun(task){
-  const res=await fetch('./api/run',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({task,workspace:ui.options.workspace,retries:ui.options.retries,maxDepth:ui.options.maxDepth,maxChildren:ui.options.maxChildren})});
-  const state=await res.json();if(!res.ok)throw new Error(state.error||'Run failed to start');ui.activeRunId=state.runId;mergeEvents(state.events||[]);persist();connectSse();await pollServerRun(state.runId);
+async function detectRuntime(){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),800);
+  try{
+    const res=await fetch('./api/capabilities',{cache:'no-store',signal:controller.signal});clearTimeout(timer);
+    if(!res.ok)throw new Error('No local host');capabilities=await res.json();mode='server';connectSse();
+  }catch{clearTimeout(timer);mode='browser';capabilities={provider:'browser-local',autonomous:true,capabilities:{browser:true,localInference:true,runPersistence:true}}}
+  const support=browserRepoSupport(navigator);
+  $('#health').textContent=mode==='server'?(capabilities.autonomous?`${capabilities.provider} online`:'execution host'):(support.supported?'browser · chat + repo sandbox':'browser · chat');
+  $('#modeLabel').textContent=mode==='server'?capabilities.provider:'browser';
+  const notice=capabilityMessage();$('#capabilityNotice').innerHTML=notice;$('#capabilityNotice').hidden=!notice;
+  $('#chatModeHint').textContent=mode==='server'?'Local execution host connected.':'No-key browser chat. Public Node/JS/TS repo tasks execute in-browser on compatible desktop Chromium.';
+  renderCapabilities();renderSkills();
+  if(ui.runStatus==='interrupted'&&ui.activeRunId){if(mode==='server'){showResume('A previous run may still be active on the local host.');pollServerRun(ui.activeRunId)}else showResume('The previous local-host run was interrupted. Reconnect the host to recover it.')}
 }
-async function startBrowserRun(task){
+
+async function runServer(task){
+  const res=await fetch('./api/runs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({task,...ui.options})});
+  const data=await res.json();if(!res.ok)throw new Error(data.error||'Could not start run');ui.activeRunId=data.runId;persist();connectSse();pollServerRun(data.runId);
+}
+async function runBrowser(task){
   if(taskNeedsExecutionHost(task)){
     const support=browserRepoSupport(navigator);
     if(!support.supported){
-      ui.activeRunId=uid();persist();acceptEvent(makeEvent('run:start',task));acceptEvent(makeEvent('capability:blocked',support.reason,{name:'Browser compatibility',data:{required:['desktop Chromium','WebContainer']}}));
       const text=`${support.reason} Open this same XRAI URL in current desktop Chrome or Edge for zero-install public-repo execution; no local install or API key is required.`;
       addMessage('agent',text);ui.result={runId:ui.activeRunId,output:text,score:null,attempts:0,learning:'none',provider:'browser-compatibility'};acceptEvent(makeEvent('run:done','Task stopped before unsupported execution.',{data:{attempts:0,learning:'none'}}));setRunStatus('error','browser compatibility');return;
     }
@@ -215,60 +228,41 @@ async function startBrowserRun(task){
 async function run(task,{resume=false}={}){
   const cleaned=String(task||'').trim();if(!cleaned)return;
   hideResume();ui.lastTask=cleaned;ui.result=null;ui.events=[];ui.activeRunId=null;
-  $('#score').textContent='—';$('#attempts').textContent='—';$('#learning').textContent='—';$('#progressBar').style.width='0%';$('#progressValue').textContent='0%';$('#progressLabel').textContent='Starting';$('#currentTask').textContent=cleaned;$('#runMeta').textContent='starting…';
-  if(!resume)addMessage('user',cleaned,{runId:null});
-  setRunStatus('running','starting');setView(window.innerWidth<760?'chat':'workspace',false);renderGraph();renderActivity();renderTimeline();
-  try{if(mode==='server'&&capabilities?.autonomous)await startServerRun(cleaned);else await startBrowserRun(cleaned)}catch(error){const message=error instanceof Error?error.message:String(error);setRunStatus('error',message);addMessage('agent',`Error: ${message}`)}finally{$('#runButton').disabled=ui.runStatus==='running';$('#rerun').disabled=!ui.lastTask||ui.runStatus==='running';persist()}
+  if(!resume)addMessage('user',cleaned,{runId:null,persistMessage:false});persist();setRunStatus('running','starting');
+  const startEvent=makeEvent('run:start',cleaned,{data:{mode}});acceptEvent(startEvent);ui.activeRunId=startEvent.runId;persist();
+  try{if(mode==='server')await runServer(cleaned);else await runBrowser(cleaned)}catch(error){const message=error instanceof Error?error.message:String(error);setRunStatus('error',message);addMessage('agent',`Run failed: ${message}`);acceptEvent(makeEvent('run:done',`Run failed: ${message}`,{data:{score:0,attempts:0,learning:'none'}}))}
+}
+function resumeRecovered(){hideResume();if(!ui.lastTask)return;setRunStatus('idle','ready to resume');run(ui.lastTask,{resume:true})}
+function reset(){
+  if(!confirm('Clear persisted XRAI UI state? Learned skills are kept.'))return;
+  ui=clearUiState(localStorage);ui.messages=[welcome];renderAll();persist();
+}
+function renderAll(){
+  renderMessages();renderGraph();renderActivity();renderTimeline();updatePatchButton();
+  $('#score').textContent=ui.result?.score==null?'—':`${Math.round(ui.result.score*100)}%`;
+  $('#attempts').textContent=ui.result?.attempts??'—';
+  $('#learning').textContent=ui.result?.learning?.status||ui.result?.learning||'—';
+  $('#currentTask').textContent=ui.lastTask||'No task running.';
+  $('#status').textContent=ui.statusText||'ready';
+  $('#rerun').disabled=!ui.lastTask||ui.runStatus==='running';
+  $('#runButton').disabled=ui.runStatus==='running';
+  $('#statusHealth').textContent=ui.runStatus==='error'?'Needs attention':ui.runStatus==='running'?'Running':'Healthy';
+  if(ui.activeRunId)$('#runMeta').textContent=`run ${ui.activeRunId.slice(0,8)}`;
+  if(ui.runStatus==='running'){ui.runStatus='interrupted';ui.statusText='recovered after refresh';persist();showResume('The page refreshed while a run was active. Your task and visible progress were preserved.')}
 }
 
-async function recoverRun(){
-  renderMessages();renderGraph();renderActivity();renderTimeline();
-  $('#status').textContent=ui.statusText||ui.runStatus||'ready';$('#runButton').disabled=ui.runStatus==='running';$('#rerun').disabled=!ui.lastTask||ui.runStatus==='running';
-  for(const ev of activeEvents())updateFromEvent(ev);
-  if(ui.result){$('#score').textContent=ui.result.score==null?'—':`${Math.round(ui.result.score*100)}%`;$('#attempts').textContent=ui.result.attempts??'—';$('#learning').textContent=ui.result.learning?.status||ui.result.learning||'—';updatePatchButton()}
-  if(ui.lastTask)$('#currentTask').textContent=ui.lastTask;
-  if(ui.runStatus!=='running')return;
-  if(mode==='server'&&ui.activeRunId){
-    try{const res=await fetch(`./api/runs/${ui.activeRunId}`,{cache:'no-store'});if(res.ok){const state=await res.json();mergeEvents(state.events||[]);if(state.status==='completed'){applyResult(state.result||state,ui.activeRunId);return}if(state.status==='running'){setRunStatus('running','reconnected · run still active');showResume('The server run is still active; progress has been restored.');hideResume();pollServerRun(ui.activeRunId);return}}}catch{}
-  }
-  ui.runStatus='interrupted';persist();setRunStatus('interrupted','interrupted by page reload');showResume('Your task and visible progress were restored. Resume restarts the browser-only run safely.');
-}
-
-async function detectRuntime(){
-  try{
-    const res=await fetch('./api/capabilities',{headers:{accept:'application/json'},cache:'no-store'});if(!res.ok)throw new Error('static');
-    capabilities=await res.json();mode='server';connectSse();
-    $('#modeLabel').textContent=capabilities.autonomous?`${capabilities.provider}`:'server + browser';
-    $('#health').textContent=capabilities.autonomous?'execution host ready':'server connected';
-    $('#chatModeHint').textContent=capabilities.autonomous?'Full local execution host: files, shell, repo edits, tests, and durable runs.':'Local server connected; browser AI remains available, MCP is ready.';
-  }catch{
-    mode='browser';capabilities={autonomous:false,provider:'browser-local',capabilities:{browserLocal:true,runPersistence:true}};
-    $('#modeLabel').textContent=isConstrainedDevice(navigator)?'browser · mobile-safe':'browser · no-key';
-    $('#health').textContent=isConstrainedDevice(navigator)?'browser · mobile-safe':'browser · no-key';
-    const support=browserRepoSupport(navigator);$('#chatModeHint').textContent=support.supported?'Public browser: no-key chat + real public Node repo execution in an isolated browser sandbox.':'Public browser: no-key chat. Zero-install public repo execution currently needs desktop Chrome/Edge.';
-  }
-  updateCapabilityNotice();renderCapabilities();renderSkills();await recoverRun();
-}
-
-function resetUi(){
-  ui=clearUiState(localStorage);ui.messages=[welcome];if(window.innerWidth<760)ui.view='chat';persist();renderMessages();renderGraph();renderActivity();renderTimeline();$('#currentTask').textContent='No task running.';$('#score').textContent='—';$('#attempts').textContent='—';$('#learning').textContent='—';$('#progressBar').style.width='0%';$('#progressValue').textContent='0%';$('#progressLabel').textContent='Idle';$('#runMeta').textContent='No active run';$('#status').textContent='ready';hideResume();updatePatchButton();setView(ui.view,false)
-}
-
-$$('.side-nav button').forEach(button=>button.addEventListener('click',()=>setView(button.dataset.view)));
-$$('.back-workspace').forEach(button=>button.addEventListener('click',()=>setView('workspace')));
-$$('[data-runtime-target]').forEach(button=>button.addEventListener('click',()=>setView(button.dataset.runtimeTarget)));
+$('#chatForm').addEventListener('submit',e=>{e.preventDefault();const task=$('#task').value.trim();if(!task)return;$('#task').value='';run(task)});
+$('#rerun').addEventListener('click',()=>ui.lastTask&&run(ui.lastTask));
+$('#clear').addEventListener('click',reset);
 $('#runtimeButton').addEventListener('click',()=>setView('runtime'));
 $('#chatFocusButton').addEventListener('click',()=>setView('chat'));
 $('#activityFocusButton').addEventListener('click',()=>setView('activity'));
-$('#chatForm').addEventListener('submit',event=>{event.preventDefault();const task=$('#task').value.trim();if(!task)return;$('#task').value='';run(task)});
-$('#rerun').addEventListener('click',()=>ui.lastTask&&run(ui.lastTask,{resume:true}));
-$('#resumeButton').addEventListener('click',()=>{hideResume();if(mode==='server'&&ui.activeRunId&&ui.runStatus==='running')pollServerRun(ui.activeRunId);else ui.lastTask&&run(ui.lastTask,{resume:true})});
-$('#clear').addEventListener('click',resetUi);
-$('#downloadPatch').addEventListener('click',()=>{if(!ui.result?.diff)return;const name=`xrai-${String(ui.result.repo||'repo').replace(/[^a-z0-9._-]+/gi,'-')}-${String(ui.result.sha||'patch').slice(0,8)}.patch`,blob=new Blob([ui.result.diff],{type:'text/plain'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)});
+$$('.side-nav button').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
+$$('.back-workspace').forEach(b=>b.addEventListener('click',()=>setView('workspace')));
+$$('[data-runtime-target]').forEach(b=>b.addEventListener('click',()=>setView('runtime')));
+$('#resumeButton').addEventListener('click',resumeRecovered);
+$('#downloadPatch').addEventListener('click',()=>{if(!ui.result?.diff)return;const blob=new Blob([ui.result.diff],{type:'text/x-diff'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`xrai-${(ui.result.repo||'patch').replace(/[^a-z0-9_-]+/gi,'-')}.patch`;a.click();URL.revokeObjectURL(url);setTimeout(()=>URL.revokeObjectURL(url),1000)});
 window.addEventListener('pagehide',persist);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')persist()});
-window.addEventListener('resize',()=>{if(ui.view==='workspace'&&window.innerWidth<760)setView('chat')});
 
-try{const m=JSON.parse(localStorage.getItem('xrai-meta-v2')||'{}');if(m.version)$('#metaVersion').textContent=`v${m.version}`}catch{}
-if(window.innerWidth<760&&ui.view==='workspace')ui.view='chat';
-setView(ui.view,false);renderMessages();renderGraph();renderActivity();renderTimeline();detectRuntime();
+renderAll();detectRuntime();
