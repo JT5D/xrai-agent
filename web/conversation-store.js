@@ -1,3 +1,5 @@
+import { MAX_UI_STATE_CHARS } from './state.js';
+
 export const CHATS_KEY='xrai-chats-v1';
 export const ACTIVE_CHAT_KEY='xrai-active-chat-v1';
 export const UI_STATE_KEY='xrai-ui-v4';
@@ -61,7 +63,8 @@ export function snapshotChat(storage=globalThis.localStorage,state=null,chatId=n
 }
 export function snapshotCurrentChat(storage=globalThis.localStorage){
   if(chatStoreOversized(storage))return null;
-  const state=parse(storage,UI_STATE_KEY,null);if(!state)return null;
+  const raw=rawValue(storage,UI_STATE_KEY);if(!raw||raw.length>MAX_UI_STATE_CHARS)return null;
+  let state;try{state=JSON.parse(raw)}catch{return null}if(!state)return null;
   return snapshotChat(storage,state,ensureActiveChat(storage,state));
 }
 export function newChat(storage=globalThis.localStorage,transitionStorage=globalThis.sessionStorage){
