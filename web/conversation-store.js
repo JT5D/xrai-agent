@@ -64,8 +64,8 @@ export function restoreChat(storage=globalThis.localStorage,chatId,transitionSto
   }catch{finishChatTransition(transitionStorage);return false}
 }
 export function forkChat(storage=globalThis.localStorage,chatId,transitionStorage=globalThis.sessionStorage){
-  const rows=listChats(storage),source=rows.find(x=>x.id===chatId);if(!source)return null;
   snapshotCurrentChat(storage);
+  const rows=listChats(storage),source=rows.find(x=>x.id===chatId);if(!source)return null;
   const next=id(),forkedAt=Date.now(),state=compactState(source.state),rootId=source.rootId||source.id;
   state.branch={parentChatId:source.id,rootChatId:rootId,forkedAt};
   const branch={id:next,title:`${source.title} · branch`,createdAt:forkedAt,updatedAt:forkedAt,state,parentId:source.id,rootId,forkedAt};
