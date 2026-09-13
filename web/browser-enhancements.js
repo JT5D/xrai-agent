@@ -25,9 +25,9 @@ async function executeBuiltin(task){
     const data=await runBuiltinTask(task,{emit:event=>{emitted.push(event);setBusy(event.name==='web_search'?'searching web':event.summary)},progress:setBusy});
     if(!data)return false;
     state=currentState();state.activeRunId=data.runId;state.events=emitted.slice(-500);state.result={runId:data.runId,output:data.output||'',score:data.score??null,attempts:data.attempts??1,learning:data.learning??null,provider:data.provider||'browser-tools',diff:'',repo:null,sha:null,changedFiles:[]};
-    state.runStatus='completed';state.statusText='done · browser-tools';appendMessage(state,'agent',data.output||'Completed.',data.runId);writeState(state);snapshotChat(localStorage,state);location.reload();return true;
+    state.runStatus='completed';state.statusText='done · browser-tools';appendMessage(state,'agent',data.output||'Completed.',data.runId);writeState(state);snapshotChat(localStorage,state);window.dispatchEvent(new Event('xrai:state-updated'));return true;
   }catch(error){
-    state=currentState();const message=error instanceof Error?error.message:String(error);state.events=emitted.slice(-500);state.runStatus='error';state.statusText=message;state.result={runId:state.activeRunId,output:`Web/tool execution failed: ${message}`,score:0,attempts:1,learning:'none',provider:'browser-tools'};appendMessage(state,'agent',`Web/tool execution failed: ${message}`,state.activeRunId);writeState(state);snapshotChat(localStorage,state);location.reload();return true;
+    state=currentState();const message=error instanceof Error?error.message:String(error);state.events=emitted.slice(-500);state.runStatus='error';state.statusText=message;state.result={runId:state.activeRunId,output:`Web/tool execution failed: ${message}`,score:0,attempts:1,learning:'none',provider:'browser-tools'};appendMessage(state,'agent',`Web/tool execution failed: ${message}`,state.activeRunId);writeState(state);snapshotChat(localStorage,state);window.dispatchEvent(new Event('xrai:state-updated'));return true;
   }
 }
 
