@@ -1,0 +1,60 @@
+name: Validate local model quality
+on:
+  push:
+    branches: [repair/local-model-quality]
+permissions:
+  contents: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 0da407af28cfecbdaac3e6dc0d37826bcc38dd28
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-save --ignore-scripts playwright@1.55.0
+      - name: Apply bounded model and prompt repair
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('web/local-agent.js');s=p.read_text()
+          s=s.replace("const LITE_MODEL_ID='onnx-community/SmolLM2-135M-Instruct-ONNX-MHA';\n",'')
+          start=s.index('export function selectBrowserModelProfile(');end=s.index('\n',start)
+          s=s[:start]+"export function selectBrowserModelProfile(nav={},preferFast=false){const constrained=isConstrainedDevice(nav),webgpu=Boolean(nav.gpu),brief=preferFast||constrained;return{constrained,modelId:FULL_MODEL_ID,device:webgpu?'webgpu':'wasm',dtype:'q4',maxNewTokens:brief?220:420,label:'LFM2.5 350M'}}"+s[end:]
+          start=s.index("    const messages=[{role:'system',content:`You are XRAI.");end=s.index('\n',start)
+          s=s[:start]+"    const messages=[{role:'system',content:`You are XRAI, a concise helpful assistant. Use the conversation to answer the latest request. You have no execution tools this turn: never claim commands, edits, installations, deployment or verified improvements. Prior replies are not proof.${c.messages.length?` Active repo: ${c.repo}. Prior goal: ${c.goal}.`:''}`},...c.messages,{role:'user',content:task}];"+s[end:]
+          p.write_text(s)
+          p=Path('test/static.test.js');s=p.read_text().replace("assert.match(local,/SmolLM2-135M-Instruct-ONNX-MHA/);",'').replace('/135M/','/350M/').replace("assert.equal(adapter.dtype,'q4f16')","assert.equal(adapter.dtype,'q4')").replace('browser chooses a smaller quantized model on mobile, a full model when requested, and a fast fallback','browser preserves model quality on mobile while bounding the response budget');p.write_text(s)
+          p=Path('test/live-pages.e2e.mjs');s=p.read_text().replace("const base=rawBase.replace(/^http:/,'https:').replace(/\\/?$/,'/');","const base=(/^http:\\/\\/(?:127\\.0\\.0\\.1|localhost)(?::|\\/)/.test(rawBase)?rawBase:rawBase.replace(/^http:/,'https:')).replace(/\\/?$/,'/');");p.write_text(s)
+          PY
+          npm run check > source-checks.txt 2>&1
+      - name: Exercise actual model and conversation UI
+        run: |
+          python3 -m http.server 8080 --bind 127.0.0.1 --directory web > /tmp/xrai-server.log 2>&1 &
+          trap 'kill $!' EXIT
+          for n in 1 2 3 4 5; do curl -fsS http://127.0.0.1:8080/ > /dev/null && break || sleep 1; done
+          xvfb-run -a node test/live-pages.e2e.mjs http://127.0.0.1:8080/ model-runtime
+          node test/conversation.e2e.mjs
+      - name: Export tested source without temporary workflow
+        run: |
+          git config user.name JT5D
+          git config user.email jtunick@theimclab.com
+          git add web/local-agent.js test/static.test.js test/live-pages.e2e.mjs
+          git commit -m 'Preserve local model quality and simplify conversation instructions'
+          git push origin HEAD:refs/heads/repair/local-model-quality-tested
+          git rev-parse HEAD > artifacts/tested-commit.txt
+      - name: Collect evidence
+        if: always()
+        run: |
+          mkdir -p artifacts
+          cp source-checks.txt artifacts/ || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: local-model-quality-validation
+          path: artifacts/
+          retention-days: 7
