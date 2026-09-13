@@ -87,7 +87,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flow: [chat-retry, model-runtime, web, repo]
+        flow: [chat-retry, mobile-chat, model-runtime, web, repo]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

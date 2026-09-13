@@ -39,6 +39,13 @@ test('public composer stays inert until app initialization owns form submission'
   assert.match(app,/\$\('#runButton'\)\.disabled=ui\.runStatus==='running'/);
 });
 
+test('mobile composer is not covered by the desktop runtime dock',async()=>{
+  const css=await fs.readFile(new URL('../web/styles.css',import.meta.url),'utf8');
+  const mobile=css.match(/@media\(max-width:760px\)\{[^\n]+/i)?.[0]||'';
+  assert.match(mobile,/\.mode-dock\{display:none\}/);
+  assert.match(mobile,/\.composer\{position:sticky;bottom:0;z-index:25/);
+});
+
 test('browser run state crosses a paint boundary before heavyweight execution starts',async()=>{
   const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
   assert.match(app,/const yieldToBrowser=.*requestAnimationFrame/);

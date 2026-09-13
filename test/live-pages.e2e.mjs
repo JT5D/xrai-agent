@@ -6,9 +6,10 @@ const rawBase=process.argv[2]||process.env.XRAI_LIVE_URL||'https://jt5d.github.i
 const flow=process.argv[3]||process.env.XRAI_E2E_FLOW||'smoke';
 const base=rawBase.replace(/^http:/,'https:').replace(/\/?$/,'/');
 const artifacts='artifacts';
-const FLOW_DEADLINES={smoke:60_000,web:45_000,'chat-retry':60_000,'model-runtime':90_000,repo:360_000};
+const FLOW_DEADLINES={smoke:60_000,web:45_000,'chat-retry':60_000,'mobile-chat':60_000,'model-runtime':90_000,repo:360_000};
 const flowDeadline=FLOW_DEADLINES[flow]||180_000;
-const deterministicChatModel=flow==='chat-retry';
+const mobileChat=flow==='mobile-chat';
+const deterministicChatModel=flow==='chat-retry'||mobileChat;
 const softwareWebGpu=flow==='model-runtime';
 const headed=flow==='repo'||softwareWebGpu;
 const launchArgs=softwareWebGpu?[
@@ -141,6 +142,16 @@ async function runChatRetry(){
   checkpoint('retry:done');
 }
 
+async function runMobileChat(){
+  checkpoint('mobile-chat:start');
+  const result=await submit('What is 2 + 2?',20_000),output=String(result.result?.output||'');
+  require(/\b4\b/.test(output),'mobile prompt did not produce the deterministic answer');
+  require(await page.locator('#runButton').isVisible(),'mobile Run agent control is not visible');
+  require(await page.locator('.mode-dock').isHidden(),'desktop runtime dock is intercepting the mobile composer');
+  report.flows.mobileChat={ok:true,provider:result.result?.provider,runId:result.result?.runId};
+  checkpoint('mobile-chat:done');
+}
+
 async function runModelRuntime(){
   checkpoint('model-runtime:start');
   const task='Reply with OK.';
@@ -205,7 +216,7 @@ async function runRepo(){
 try{
   checkpoint('browser:launch');
   browser=await chromium.launch({channel:'chrome',headless:!headed,args:launchArgs});
-  const context=await browser.newContext({viewport:{width:1440,height:1000}});
+  const context=await browser.newContext(mobileChat?{viewport:{width:390,height:844},userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'}:{viewport:{width:1440,height:1000}});
   page=await context.newPage();
   page.setDefaultTimeout(5000);
   page.setDefaultNavigationTimeout(60_000);
@@ -245,6 +256,7 @@ try{
   checkpoint('runtime:ready');
 
   if(flow==='chat-retry')await runChatRetry();
+  else if(flow==='mobile-chat')await runMobileChat();
   else if(flow==='model-runtime')await runModelRuntime();
   else if(flow==='web')await runWeb();
   else if(flow==='repo')await runRepo();
