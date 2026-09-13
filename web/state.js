@@ -36,7 +36,8 @@ export function isConstrainedDevice(nav={}){
   const ua=String(nav.userAgent||'');
   const mobile=/iPhone|iPad|iPod|Android|Mobile/i.test(ua);
   const lowMemory=Number(nav.deviceMemory||0)>0&&Number(nav.deviceMemory)<=4;
-  return mobile||lowMemory;
+  const noWebGpu=!nav.gpu;
+  return mobile||lowMemory||noWebGpu;
 }
 
 export function defaultUiState(){
@@ -87,5 +88,5 @@ export function saveUiState(storage,state){
 
 export function clearUiState(storage){
   try{storage?.removeItem(UI_STATE_KEY)}catch{}
-  return defaultUiState();
+  return defaultUiState()
 }
