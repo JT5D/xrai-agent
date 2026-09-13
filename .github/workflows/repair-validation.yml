@@ -1,7 +1,7 @@
-name: Validate conversation repair
+name: Validate isolated context repair
 on:
   push:
-    branches: [repair/conversation-0348]
+    branches: [repair/context-isolated-9100b6]
 permissions:
   contents: write
 jobs:
@@ -15,17 +15,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Apply exact reviewed repair
+      - name: Apply reviewed line-offset repair
         run: |
-          if [ -f .repair.json ]; then
-            python3 - <<'PY'
-          import json,hashlib,gzip,base64
+          python3 - <<'PY'
+          import json,hashlib
           from pathlib import Path
           payload=json.loads(Path('.repair.json').read_text())
-          if isinstance(payload,dict):
-              raw=gzip.decompress(base64.b64decode(payload['gzip']))
-              assert hashlib.sha256(raw).hexdigest()==payload['sha256']
-              payload=json.loads(raw)
+          assert isinstance(payload,list)
           for entry in payload:
               p=Path(entry['path'])
               assert not p.is_absolute() and '..' not in p.parts
@@ -34,23 +30,24 @@ jobs:
                   p.write_text(entry['text'])
               else:
                   assert hashlib.sha256(p.read_bytes()).hexdigest()==entry['sha'],str(p)
-                  chars=list(p.read_text())
+                  lines=p.read_text().splitlines(True)
                   for start,end,text in reversed(entry['hunks']):
-                      chars[start:end]=list(text)
-                  p.write_text(''.join(chars))
+                      assert 0<=start<=end<=len(lines)
+                      lines[start:end]=[text]
+                  p.write_text(''.join(lines))
+          p=Path('web/capability-tools.js');s=p.read_text();old='what (?:are|tools|features)';assert old in s;p.write_text(s.replace(old,'(?:your|xrai) (?:tools|features)'))
+          p=Path('test/conversation-regression.test.js');p.write_text(p.read_text()+"\ntest('ordinary questions are not capability inventories',()=>{assert.equal(classifyBuiltinTask('what are trees?'),null)});\n")
           p=Path('package.json');data=json.loads(p.read_text());data['version']='0.3.48';p.write_text(json.dumps(data,indent=2)+'\n')
           p=Path('README.md');p.write_text(p.read_text().replace('v0.3.47','v0.3.48').replace('The evaluator remains internal evidence for learning; it is not the product response.','The evaluator supplies internal estimates, not execution proof. Browser suggestions remain candidates until a real verifier receipt exists. Sandbox patches are not committed or deployed.'))
           PY
-          fi
       - name: Source checks
         run: npm run check > source-checks.txt 2>&1
       - name: Browser contract checks
         if: always()
         run: |
-          if [ -f test/conversation.e2e.mjs ]; then
-            npm install --no-save --ignore-scripts playwright@1.55.0
-            node test/conversation.e2e.mjs
-          fi
+          mkdir -p artifacts
+          npm install --no-save --ignore-scripts playwright@1.55.0
+          node test/conversation.e2e.mjs > artifacts/browser-checks.txt 2>&1
       - name: Export source and evidence
         if: always()
         run: |
@@ -60,19 +57,17 @@ jobs:
       - name: Create tested commit without repair infrastructure
         if: success()
         run: |
-          if [ -f .repair.json ]; then
-            git config user.name JT5D
-            git config user.email jtunick@theimclab.com
-            git rm --ignore-unmatch .repair.json .github/workflows/repair-validation.yml
-            git add web test package.json README.md .github/workflows/pages.yml
-            tree=$(git write-tree)
-            commit=$(printf '%s\n' 'Fix conversation context, serialized execution, research relevance and evidence integrity' | git commit-tree "$tree" -p 69c3440e4368820147de9ee8c53de6f92cc1fc08)
-            git push origin "$commit:refs/heads/repair/conversation-0348-tested"
-            printf '%s\n' "$commit" > artifacts/tested-commit.txt
-          fi
+          git config user.name JT5D
+          git config user.email jtunick@theimclab.com
+          git rm --ignore-unmatch .repair.json .github/workflows/repair-validation.yml
+          git add web test package.json README.md .github/workflows/pages.yml
+          tree=$(git write-tree)
+          commit=$(printf '%s\n' 'Fix conversation context, serialized execution, research relevance and evidence integrity' | git commit-tree "$tree" -p 69c3440e4368820147de9ee8c53de6f92cc1fc08)
+          git push origin "$commit:refs/heads/repair/context-isolated-tested-9100b6"
+          printf '%s\n' "$commit" > artifacts/tested-commit.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: conversation-repair-validation
+          name: isolated-context-validation
           path: artifacts/
           retention-days: 7
