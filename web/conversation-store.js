@@ -1,6 +1,7 @@
 export const CHATS_KEY='xrai-chats-v1';
 export const ACTIVE_CHAT_KEY='xrai-active-chat-v1';
 export const UI_STATE_KEY='xrai-ui-v4';
+export const CHAT_SWITCH_KEY='xrai-chat-switch-v1';
 const MAX_CHATS=24;
 
 const id=()=>globalThis.crypto?.randomUUID?.()||`chat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`;
@@ -49,10 +50,18 @@ export function newChat(storage=globalThis.localStorage){
   const next=id();try{storage?.setItem(ACTIVE_CHAT_KEY,next);storage?.removeItem(UI_STATE_KEY)}catch{}
   return next;
 }
-export function restoreChat(storage=globalThis.localStorage,chatId){
-  snapshotCurrentChat(storage);
+export function restoreChat(storage=globalThis.localStorage,chatId,transitionStorage=globalThis.sessionStorage){
   const row=listChats(storage).find(x=>x.id===chatId);if(!row)return false;
-  try{storage?.setItem(ACTIVE_CHAT_KEY,row.id);storage?.setItem(UI_STATE_KEY,JSON.stringify(compactState(row.state)));return true}catch{return false}
+  snapshotCurrentChat(storage);
+  try{
+    transitionStorage?.setItem(CHAT_SWITCH_KEY,row.id);
+    storage?.setItem(ACTIVE_CHAT_KEY,row.id);
+    storage?.setItem(UI_STATE_KEY,JSON.stringify(compactState(row.state)));
+    return true;
+  }catch{
+    try{transitionStorage?.removeItem(CHAT_SWITCH_KEY)}catch{}
+    return false;
+  }
 }
 export function deleteChat(storage=globalThis.localStorage,chatId){
   const rows=listChats(storage).filter(x=>x.id!==chatId);writeChats(storage,rows);
