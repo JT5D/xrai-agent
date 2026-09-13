@@ -5,6 +5,7 @@ const WEB_RE=/\b(web search|search the web|search online|search the internet|loo
 const FRESH_RE=/\b(latest|current|today|recent|up[- ]?to[- ]?date|this week|this month)\b/i;
 const ADD_WEB_RE=/\b(add|create|install|enable|implement)\b[\s\S]{0,80}\b(web search|search skill|internet search)\b/i;
 const EVAL_KEYS=new Set(['score','critique','work_product','skills','missing_elements']);
+const CONTEXT_MARKER='\n\nPrevious XRAI context';
 
 export const CAPABILITIES=[
   ['On-device chat/reasoning','Runs locally in supported browsers; no user model API key required.'],
@@ -20,7 +21,7 @@ export const CAPABILITIES=[
 ];
 
 export function classifyBuiltinTask(task=''){
-  const text=String(task).trim();
+  const text=String(task).split(CONTEXT_MARKER,1)[0].trim();
   const asksCapabilities=CAPABILITY_RE.test(text);
   const asksWeb=WEB_RE.test(text);
   const asksAddWeb=ADD_WEB_RE.test(text);
@@ -32,10 +33,10 @@ export function classifyBuiltinTask(task=''){
 }
 
 export function extractSearchQuery(task=''){
-  let q=String(task).trim();
+  let q=String(task).split(CONTEXT_MARKER,1)[0].trim();
   q=q.replace(/^(?:please\s+)?(?:search the web|search online|search the internet|look up online|research online|internet search)\s*(?:for|about|on)?\s*/i,'');
   q=q.replace(/\b(if not|if it cannot|if you cannot)[\s\S]*$/i,'').trim();
-  return q||String(task).trim();
+  return q||String(task).split(CONTEXT_MARKER,1)[0].trim();
 }
 
 export function capabilityText({webEvidence}={}){
