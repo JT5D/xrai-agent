@@ -17,8 +17,7 @@ jobs:
           node-version: 20
       - name: Apply exact reviewed repair
         run: |
-          if [ -f .repair.json ]; then
-            python3 - <<'PY'
+          python3 - <<'PY'
           import json,hashlib,gzip,base64
           from pathlib import Path
           payload=json.loads(Path('.repair.json').read_text())
@@ -35,11 +34,13 @@ jobs:
               else:
                   assert hashlib.sha256(p.read_bytes()).hexdigest()==entry['sha'],str(p)
                   lines=p.read_text().splitlines(True)
-                  for start,end,text in reversed(entry['hunks']):
-                      lines[start:end]=[text]
+                  for start,end,text in reversed(entry['hunks']): lines[start:end]=[text]
                   p.write_text(''.join(lines))
           def replace(path,old,new):
-              p=Path(path);s=p.read_text();assert old in s,(path,old);p.write_text(s.replace(old,new))
+              p=Path(path);s=p.read_text()
+              if new in s: return
+              assert old in s,(path,old)
+              p.write_text(s.replace(old,new))
           replace('test/e2e-config.test.js',r'flow: \[chat-retry,',r'flow: \[conversation, chat-retry,')
           replace('web/improvement-guard.js','d.commands.every(c=>c.exitCode===0)','d.commands.every(c=>c.exitCode===0&&!c.timedOut)')
           replace('web/state.js','cmd:cut(c.cmd,500),exitCode:c.exitCode','cmd:cut(c.cmd,500),exitCode:c.exitCode,timedOut:Boolean(c.timedOut)')
@@ -48,35 +49,30 @@ jobs:
           p=Path('package.json');data=json.loads(p.read_text());data['version']='0.3.48';p.write_text(json.dumps(data,indent=2)+'\n')
           p=Path('README.md');p.write_text(p.read_text().replace('v0.3.47','v0.3.48').replace('The evaluator remains internal evidence for learning; it is not the product response.','The evaluator supplies internal estimates, not execution proof. Browser conversation turns use bounded history and never promote a model score to proof. Sandbox patches are not committed or deployed.'))
           PY
-          fi
       - name: Source checks
         run: npm run check > source-checks.txt 2>&1
       - name: Browser contract checks
         if: always()
         run: |
-          if [ -f test/conversation.e2e.mjs ]; then
-            npm install --no-save --ignore-scripts playwright@1.55.0
-            node test/conversation.e2e.mjs
-          fi
+          npm install --no-save --ignore-scripts playwright@1.55.0
+          node test/conversation.e2e.mjs
       - name: Export source and evidence
         if: always()
         run: |
           mkdir -p artifacts
           cp source-checks.txt artifacts/ || true
           tar --exclude=node_modules --exclude=.git --exclude=artifacts -czf artifacts/source.tar.gz README.md package.json src web test knowledge .github
-      - name: Create tested commit without repair infrastructure
+      - name: Create tested commit
         if: success()
         run: |
-          if [ -f .repair.json ]; then
-            git config user.name JT5D
-            git config user.email jtunick@theimclab.com
-            git rm --ignore-unmatch .repair.json .github/workflows/repair-validation.yml
-            git add web test package.json README.md .github/workflows/pages.yml
-            tree=$(git write-tree)
-            commit=$(printf '%s\n' 'Fix conversation context, serialized execution, research relevance and evidence integrity' | git commit-tree "$tree" -p 69c3440e4368820147de9ee8c53de6f92cc1fc08)
-            git push origin "$commit:refs/heads/repair/conversation-0348-tested"
-            printf '%s\n' "$commit" > artifacts/tested-commit.txt
-          fi
+          git config user.name JT5D
+          git config user.email jtunick@theimclab.com
+          git rm --ignore-unmatch .repair.json .github/workflows/repair-validation.yml
+          git add web test package.json README.md .github/workflows/pages.yml
+          tree=$(git write-tree)
+          commit=$(printf '%s\n' 'Fix conversation context, serialized execution, research relevance and evidence integrity' | git commit-tree "$tree" -p 69c3440e4368820147de9ee8c53de6f92cc1fc08)
+          git push origin "$commit:refs/heads/repair/conversation-0348-tested"
+          printf '%s\n' "$commit" > artifacts/tested-commit.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
