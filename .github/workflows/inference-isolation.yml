@@ -1,53 +1,52 @@
-name: Verify portable patch export
+name: Verify deployed patch export
 on:
   push:
     branches: [repair/patch-export-3a7e1b18]
 permissions:
-  contents: write
+  contents: read
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 4
     steps:
       - uses: actions/checkout@v4
         with:
-          path: tools
+          ref: 349e7122bf465720abe299f0043daa662f1d9e59
           persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          ref: 0b2b7f5a91b05d08933ba425eaaf11a927b77e29
-          path: source
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply bounded export fix
-        working-directory: source
-        run: |
-          python3 ../tools/tools/apply-export-fix.py
-          cp ../tools/tools/patch-export.e2e.mjs test/patch-export.e2e.mjs
-      - name: Source checks
-        working-directory: source
+      - name: Verify deployed source snapshot
         run: |
           mkdir -p artifacts
-          npm run check > artifacts/source-checks.txt 2>&1
-      - name: Real patch application and rendered download
-        working-directory: source
-        run: |
-          npm install --no-save --ignore-scripts playwright@1.56.1
-          node test/patch-export.e2e.mjs
-      - name: Record tested source-only candidate
-        working-directory: source
-        run: |
-          git config user.name JT5D
-          git config user.email jtunick@theimclab.com
-          git add web/browser-workspace.js web/app.js web/index.html test/browser-workspace.test.js test/patch-export.e2e.mjs package.json README.md docs/STABILIZATION_2026-09-13.md
-          git commit -m 'Export applicable unified patches and expose downloads on mobile'
-          git push origin HEAD:refs/heads/repair/patch-export-tested-3a7e1b18
-          git rev-parse HEAD > artifacts/tested-commit.txt
-          git diff HEAD^ HEAD > artifacts/reviewed-source.diff
+          python3 - <<'PY'
+          import hashlib,json,time,urllib.request
+          from pathlib import Path
+          base='https://jt5d.github.io/xrai-agent/'
+          sha='349e7122bf465720abe299f0043daa662f1d9e59'
+          files=['browser-workspace.js','app.js','index.html']
+          expected={name:hashlib.sha256(Path('web',name).read_bytes()).hexdigest() for name in files}
+          report={'expected_commit':sha,'base':base,'expected':expected,'attempts':[],'ok':False}
+          for attempt in range(20):
+              observed={}
+              for name in files:
+                  try:
+                      req=urllib.request.Request(base+name+'?verify='+sha,headers={'Cache-Control':'no-cache'})
+                      with urllib.request.urlopen(req,timeout=10) as r: observed[name]=hashlib.sha256(r.read()).hexdigest()
+                  except Exception as e: observed[name]=str(e)
+              report['attempts'].append(observed)
+              if observed==expected: report['ok']=True;break
+              time.sleep(3)
+          Path('artifacts/deployed-source.json').write_text(json.dumps(report,indent=2))
+          assert report['ok'],'Public source did not match tested commit'
+          print('Public source matches tested commit',sha)
+          PY
+      - run: npm install --no-save --ignore-scripts playwright@1.56.1
+      - name: Exercise actual public download flow
+        run: node test/patch-export.e2e.mjs https://jt5d.github.io/xrai-agent/
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: verified-patch-export
-          path: source/artifacts/
+          name: live-patch-export
+          path: artifacts/
           retention-days: 7
