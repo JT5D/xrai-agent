@@ -40,7 +40,7 @@ export function snapshotChat(storage=globalThis.localStorage,state=null,chatId=n
   if(!state||typeof state!=='object')return null;
   const active=chatId||ensureActiveChat(storage);
   const rows=listChats(storage),previous=rows.find(x=>x.id===active),compact=compactState(state);
-  const row={id:active,title:titleFor(compact),createdAt:previous?.createdAt||Date.now(),updatedAt:Date.now(),state:compact};
+  const row={id:active,title:titleFor(compact),createdAt:previous?.createdAt||Date.now(),updatedAt:Date.now(),state:compact,parentId:previous?.parentId||null,rootId:previous?.rootId||active,forkedAt:previous?.forkedAt||null};
   writeChats(storage,[row,...rows.filter(x=>x.id!==active)]);return row;
 }
 export function snapshotCurrentChat(storage=globalThis.localStorage){
@@ -62,6 +62,26 @@ export function restoreChat(storage=globalThis.localStorage,chatId,transitionSto
     storage?.setItem(UI_STATE_KEY,JSON.stringify(compactState(row.state)));
     return true;
   }catch{finishChatTransition(transitionStorage);return false}
+}
+export function forkChat(storage=globalThis.localStorage,chatId,transitionStorage=globalThis.sessionStorage){
+  const rows=listChats(storage),source=rows.find(x=>x.id===chatId);if(!source)return null;
+  snapshotCurrentChat(storage);
+  const next=id(),forkedAt=Date.now(),state=compactState(source.state),rootId=source.rootId||source.id;
+  state.branch={parentChatId:source.id,rootChatId:rootId,forkedAt};
+  const branch={id:next,title:`${source.title} · branch`,createdAt:forkedAt,updatedAt:forkedAt,state,parentId:source.id,rootId,forkedAt};
+  writeChats(storage,[branch,...rows]);
+  if(!beginTransition(transitionStorage,next))return null;
+  try{storage?.setItem(ACTIVE_CHAT_KEY,next);storage?.setItem(UI_STATE_KEY,JSON.stringify(state));return branch}catch{finishChatTransition(transitionStorage);return null}
+}
+const metric=row=>({
+  id:row?.id||null,title:row?.title||'',score:row?.state?.result?.score??null,attempts:row?.state?.result?.attempts??null,provider:row?.state?.result?.provider||null,
+  messages:Array.isArray(row?.state?.messages)?row.state.messages.length:0,events:Array.isArray(row?.state?.events)?row.state.events.length:0,
+  changedFiles:Array.isArray(row?.state?.result?.changedFiles)?row.state.result.changedFiles:[],output:String(row?.state?.result?.output||'').slice(0,500)
+});
+export function compareChats(storage=globalThis.localStorage,leftId,rightId){
+  const rows=listChats(storage),left=rows.find(x=>x.id===leftId),right=rows.find(x=>x.id===rightId);if(!left||!right)return null;
+  const a=metric(left),b=metric(right);
+  return {left:a,right:b,scoreDelta:a.score!=null&&b.score!=null?a.score-b.score:null,attemptDelta:a.attempts!=null&&b.attempts!=null?a.attempts-b.attempts:null,eventDelta:a.events-b.events};
 }
 export function deleteChat(storage=globalThis.localStorage,chatId){
   const rows=listChats(storage).filter(x=>x.id!==chatId);writeChats(storage,rows);
