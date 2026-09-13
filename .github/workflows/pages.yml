@@ -96,7 +96,13 @@ jobs:
       - name: Install Playwright runner
         run: npm install --no-save --ignore-scripts playwright@1.55.0
       - name: Exercise deployed ${{ matrix.flow }} flow
-        run: node test/live-pages.e2e.mjs "${{ needs.deploy.outputs.page_url }}" "${{ matrix.flow }}"
+        shell: bash
+        run: |
+          if [ "${{ matrix.flow }}" = "repo" ]; then
+            xvfb-run -a node test/live-pages.e2e.mjs "${{ needs.deploy.outputs.page_url }}" "${{ matrix.flow }}"
+          else
+            node test/live-pages.e2e.mjs "${{ needs.deploy.outputs.page_url }}" "${{ matrix.flow }}"
+          fi
       - name: Upload ${{ matrix.flow }} browser evidence
         if: always()
         uses: actions/upload-artifact@v4
