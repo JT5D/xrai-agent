@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CAPABILITIES,classifyBuiltinTask,isEvaluatorArtifact,runBuiltinTask } from '../web/capability-tools.js';
-import { searchWeb } from '../web/web-search.js';
+import { CAPABILITIES,classifyBuiltinTask,extractSearchQuery,isEvaluatorArtifact,runBuiltinTask } from '../web/capability-tools.js';
+import { formatWebResults,searchWeb } from '../web/web-search.js';
 
 function response(body,{status=200,type='json'}={}){
   return {ok:status>=200&&status<300,status,json:async()=>body,text:async()=>type==='text'?String(body):JSON.stringify(body)};
@@ -29,6 +29,49 @@ test('web search executes multiple no-key providers and returns source URLs',asy
   assert.ok(result.results.every(x=>/^https?:\/\//.test(x.url)));
   assert.ok(result.results.some(x=>x.source==='DuckDuckGo'));
   assert.ok(result.results.some(x=>x.source==='Wikipedia'));
+  assert.ok(result.contributingProviders>=3);
+});
+
+test('named-entity web search removes answer-format instructions and rejects irrelevant lookalikes',async()=>{
+  const task='Search the web for the current Model Context Protocol specification and give source URLs.';
+  const query=extractSearchQuery(task),seen=[];
+  assert.equal(query,'the current Model Context Protocol specification');
+  const fetchFn=async url=>{
+    const u=String(url);seen.push(u);
+    if(u.includes('search.jina.ai'))return response('<a href="https://modelcontextprotocol.io/specification">Official specification</a>',{type:'text'});
+    if(u.includes('api.duckduckgo.com'))return response({RelatedTopics:[]});
+    if(u.includes('wikipedia.org'))return response({query:{search:[
+      {title:'Transmission Control Protocol',snippet:'A transport protocol.'},
+      {title:'Model Context Protocol',snippet:'An open protocol for model context.'}
+    ]}});
+    if(u.includes('hn.algolia.com'))return response({hits:[]});
+    if(u.includes('api.github.com/search/repositories'))return response({items:[{full_name:'modelcontextprotocol/servers',html_url:'https://github.com/modelcontextprotocol/servers',stargazers_count:1,description:'Model Context Protocol servers'}]});
+    return response({}, {status:404});
+  };
+  const result=await searchWeb(query,{fetchFn,limit:6});
+  assert.ok(seen.every(url=>decodeURIComponent(url).includes('Model Context Protocol')));
+  assert.equal(result.searchedQuery,'Model Context Protocol');
+  assert.equal(result.results.length,3);
+  assert.ok(result.results.every(row=>/model.?context.?protocol/i.test(`${row.title} ${row.url} ${row.snippet}`)));
+  assert.equal(result.contributingProviders,3);
+  assert.match(formatWebResults(result),/3 relevant results from 3 contributing providers; 5\/5 responded/i);
+});
+
+test('named-entity web search fails closed when only generic lookalikes respond',async()=>{
+  const fetchFn=async url=>{
+    const u=String(url);
+    if(u.includes('wikipedia.org'))return response({query:{search:[{title:'Transmission Control Protocol',snippet:'A transport protocol.'},{title:'OAuth',snippet:'An authorization protocol.'}]}});
+    if(u.includes('search.jina.ai'))return response('',{type:'text'});
+    if(u.includes('api.duckduckgo.com'))return response({RelatedTopics:[]});
+    if(u.includes('hn.algolia.com'))return response({hits:[]});
+    if(u.includes('api.github.com/search/repositories'))return response({items:[]});
+    return response({}, {status:404});
+  };
+  const result=await searchWeb('the current Model Context Protocol specification',{fetchFn,limit:6});
+  assert.equal(result.results.length,0);
+  assert.equal(result.providers,5);
+  assert.equal(result.contributingProviders,0);
+  assert.match(formatWebResults(result),/no usable results/i);
 });
 
 test('web search bounds stalled provider body reads, not only response headers',async()=>{

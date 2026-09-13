@@ -38,12 +38,13 @@ export function extractSearchQuery(task=''){
   let q=String(task).split(CONTEXT_MARKER,1)[0].trim();
   q=q.replace(/^(?:please\s+)?(?:search the web|search online|search the internet|look up online|research online|internet search)\s*(?:for|about|on)?\s*/i,'');
   q=q.replace(/\b(if not|if it cannot|if you cannot)[\s\S]*$/i,'').trim();
+  q=q.replace(/\s+(?:and|,)\s+(?:please\s+)?(?:give|include|list|return|show|provide)\s+(?:me\s+)?(?:the\s+)?(?:source\s+urls?|sources?|citations?|links?)[.!?]*$/i,'').trim();
   return q||String(task).split(CONTEXT_MARKER,1)[0].trim();
 }
 
 export function capabilityText({webEvidence}={}){
   const list=CAPABILITIES.map(([name,detail])=>`• ${name}: ${detail}`).join('\n');
-  const proof=webEvidence?`\n\nWeb-search smoke check: ${webEvidence.results.length} usable result(s), ${webEvidence.providers}/${webEvidence.attemptedProviders} providers available, ${webEvidence.latencyMs} ms.`:'';
+  const proof=webEvidence?`\n\nWeb-search smoke check: ${webEvidence.results.length} relevant result(s) from ${webEvidence.contributingProviders||0} contributing provider(s); ${webEvidence.providers}/${webEvidence.attemptedProviders} responded in ${webEvidence.latencyMs} ms.`:'';
   return `XRAI's current capabilities:\n\n${list}\n\nYes — web search is a real built-in runtime tool now. It does not require SerpAPI, Redis, Python, a local install, or a user API key. It searches multiple no-key sources in parallel and returns source URLs; unavailable providers fail independently instead of taking the run down.${proof}\n\nCurrent public-browser boundaries: anonymous mode does not push to GitHub, private repos require an authorized lane, and WebContainer repo execution is intentionally limited to compatible web/Node toolchains.`;
 }
 
@@ -82,10 +83,10 @@ export async function runBuiltinTask(task,{emit=()=>{},progress=()=>{},fetchFn=g
   }
   if(kind==='capabilities+web'){
     progress('Verifying live web-search capability…');event('tool:start','Running no-key web-search smoke check',{name:'web_search'});
-    const evidence=await searchWeb('state of the art AI agent orchestration 2026',{fetchFn,limit:4});event('tool:done',`${evidence.results.length} web results · ${evidence.providers}/${evidence.attemptedProviders} providers`,{name:'web_search',data:evidence});
+    const evidence=await searchWeb('state of the art AI agent orchestration 2026',{fetchFn,limit:4});event('tool:done',`${evidence.results.length} relevant web results · ${evidence.contributingProviders||0} contributing · ${evidence.providers}/${evidence.attemptedProviders} responsive`,{name:'web_search',data:evidence});
     const output=capabilityText({webEvidence:evidence});event('run:done',output.slice(0,1200),{data:{score:evidence.results.length?1:.85,attempts:1,provider:'browser-tools'}});return{runId,output,score:evidence.results.length?1:.85,attempts:1,provider:'browser-tools',learning:{status:'built-in'}};
   }
   const query=extractSearchQuery(task);progress(`Searching the web for “${query}”…`);event('tool:start',query,{name:'web_search'});
-  const search=await searchWeb(query,{fetchFn});event('tool:done',`${search.results.length} results · ${search.providers}/${search.attemptedProviders} providers · ${search.latencyMs} ms`,{name:'web_search',data:search});
+  const search=await searchWeb(query,{fetchFn});event('tool:done',`${search.results.length} relevant results · ${search.contributingProviders||0} contributing · ${search.providers}/${search.attemptedProviders} responsive · ${search.latencyMs} ms`,{name:'web_search',data:search});
   const output=formatWebResults(search);event('run:done',output.slice(0,1200),{data:{score:search.results.length?1:0,attempts:1,provider:'browser-tools'}});return{runId,output,score:search.results.length?1:0,attempts:1,provider:'browser-tools',learning:{status:'none'}};
 }

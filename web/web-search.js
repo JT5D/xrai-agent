@@ -2,17 +2,42 @@ const DEFAULT_LIMIT=8;
 const TIMEOUT_MS=4500;
 const PROVIDER_TIMEOUT_MS=5500;
 const MAX_TEXT_BYTES=96_000;
+const SEARCH_STOP_WORDS=new Set(['a','about','and','are','as','at','be','best','by','current','for','from','give','in','include','is','it','latest','links','list','me','of','on','or','provide','recent','return','show','source','sources','specification','the','to','today','url','urls','with']);
 
 function clean(value=''){return String(value).replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim()}
-function dedupe(rows,limit=DEFAULT_LIMIT){
+function dedupe(rows){
   const seen=new Set(),out=[];
   for(const row of rows){
     const url=String(row?.url||'').trim(),title=clean(row?.title||'');
     if(!url||!title||seen.has(url))continue;
     seen.add(url);out.push({...row,title,snippet:clean(row.snippet||'').slice(0,500)});
-    if(out.length>=limit)break;
   }
   return out;
+}
+function normalizedTokens(value=''){
+  return clean(value).toLowerCase().match(/[a-z0-9]+/g)?.map(word=>word.length>4&&word.endsWith('s')?word.slice(0,-1):word)||[];
+}
+function namedEntityTerms(query=''){
+  const matches=String(query).match(/\b(?:[A-Z][A-Za-z0-9.-]*\s+){1,}[A-Z][A-Za-z0-9.-]*\b/g)||[];
+  const phrase=matches.sort((a,b)=>b.length-a.length)[0]||'';
+  return normalizedTokens(phrase).filter(word=>!SEARCH_STOP_WORDS.has(word));
+}
+function rankResults(rows,query,limit){
+  const queryTerms=[...new Set(normalizedTokens(query).filter(word=>word.length>2&&!SEARCH_STOP_WORDS.has(word)))];
+  const entityTerms=[...new Set(namedEntityTerms(query))];
+  const scored=dedupe(rows).map((row,index)=>{
+    const haystack=new Set(normalizedTokens(`${row.title} ${row.snippet} ${row.url}`));
+    const matches=queryTerms.filter(word=>haystack.has(word)).length;
+    const entityMatches=entityTerms.filter(word=>haystack.has(word)).length;
+    const exact=entityTerms.length>1&&clean(`${row.title} ${row.snippet} ${row.url}`).toLowerCase().replace(/[^a-z0-9]+/g,'').includes(entityTerms.join(''));
+    return{row,index,matches,entityMatches,score:(exact?100:0)+entityMatches*10+matches};
+  });
+  const relevant=entityTerms.length>1?scored.filter(item=>item.score>=100||item.entityMatches>=Math.min(2,entityTerms.length)):scored;
+  return relevant.sort((a,b)=>b.score-a.score||a.index-b.index).slice(0,limit).map(item=>item.row);
+}
+function providerQuery(query=''){
+  const matches=String(query).match(/\b(?:[A-Z][A-Za-z0-9.-]*\s+){1,}[A-Z][A-Za-z0-9.-]*\b/g)||[];
+  return matches.sort((a,b)=>b.length-a.length)[0]||query;
 }
 async function timedFetch(url,fetchFn,timeout=TIMEOUT_MS){
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeout);
@@ -75,15 +100,16 @@ async function jina(query,fetchFn){
 
 export async function searchWeb(query,{fetchFn=globalThis.fetch,limit=DEFAULT_LIMIT,providerTimeoutMs=PROVIDER_TIMEOUT_MS}={}){
   const q=clean(query);if(!q)throw new Error('Web search query is empty.');if(typeof fetchFn!=='function')throw new Error('Fetch is unavailable in this runtime.');
-  const started=Date.now(),providers=[jina,duckduckgo,wikipedia,hackerNews,github];
-  const settled=await Promise.allSettled(providers.map(fn=>bounded(fn(q,fetchFn),providerTimeoutMs,fn.name)));
-  const results=dedupe(settled.flatMap(x=>x.status==='fulfilled'?x.value:[]),limit);
+  const started=Date.now(),providers=[jina,duckduckgo,wikipedia,hackerNews,github],searchedQuery=providerQuery(q);
+  const settled=await Promise.allSettled(providers.map(fn=>bounded(fn(searchedQuery,fetchFn),providerTimeoutMs,fn.name)));
+  const results=rankResults(settled.flatMap(x=>x.status==='fulfilled'?x.value:[]),q,limit);
   const errors=settled.map((x,i)=>x.status==='rejected'?`${providers[i].name}: ${x.reason?.message||x.reason}`:null).filter(Boolean);
-  return{query:q,results,providers:providers.length-errors.length,attemptedProviders:providers.length,latencyMs:Date.now()-started,errors};
+  const contributingProviderNames=[...new Set(results.map(row=>row.source).filter(Boolean))];
+  return{query:q,searchedQuery,results,providers:providers.length-errors.length,attemptedProviders:providers.length,contributingProviders:contributingProviderNames.length,contributingProviderNames,latencyMs:Date.now()-started,errors};
 }
 
 export function formatWebResults(search){
   if(!search?.results?.length)return `I searched the web for “${search?.query||''}”, but the no-key providers returned no usable results. ${search?.errors?.length?`Provider notes: ${search.errors.slice(0,2).join('; ')}`:''}`.trim();
   const lines=search.results.map((r,i)=>`${i+1}. ${r.title} — ${r.source}\n${r.url}${r.snippet?`\n${r.snippet}`:''}`);
-  return `Web search: “${search.query}”\n${search.results.length} results from ${search.providers}/${search.attemptedProviders} available providers in ${search.latencyMs} ms.\n\n${lines.join('\n\n')}`;
+  return `Web search: “${search.query}”\n${search.results.length} relevant results from ${search.contributingProviders||0} contributing provider${search.contributingProviders===1?'':'s'}; ${search.providers}/${search.attemptedProviders} responded in ${search.latencyMs} ms.\n\n${lines.join('\n\n')}`;
 }
