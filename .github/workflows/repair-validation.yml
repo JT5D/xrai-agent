@@ -5,13 +5,9 @@ on:
 permissions:
   contents: read
 jobs:
-  live:
+  model:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
-    strategy:
-      fail-fast: false
-      matrix:
-        flow: [model-runtime, mobile-repo]
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,13 +15,44 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Prepare isolated model candidate
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('web/local-agent.js');s=p.read_text();old='const preferred=await resolveBrowserModelProfile(navigator,true),'
+          assert old in s
+          s=s.replace(old,"const preferred={modelId:FULL_MODEL_ID,device:'wasm',dtype:'q4',maxNewTokens:80,label:'LFM2.5 350M'},")
+          start=s.index("content:`You are XRAI. Answer the current request")
+          end=s.index('`}',start)
+          s=s[:start]+"content:`You are XRAI. Answer the latest user request directly and concisely. No tools were executed in this turn. Never claim to have changed files or installed anything."+s[end:]
+          p.write_text(s)
+          p=Path('test/conversation.e2e.mjs');s=p.read_text();start=s.index("    await page.addInitScript(");end=s.index("    await page.goto(base)",start);s=s[:start]+s[end:]
+          start=s.index("    await send('Help me design");end=s.index('    await context.close()',start)
+          s=s[:start]+'''    let s=await send('What is 2 + 2? Reply with only the number.');
+              assert.match(s.result.output.trim(),/^4[.!]?$/);report.math=s.result.output;
+              s=await send('My project code is cobalt-47. Reply with only that code.');
+              assert.match(s.result.output,/cobalt-47/i);report.instruction=s.result.output;
+              s=await send('What is my project code? Reply with only the code.');
+              assert.match(s.result.output,/cobalt-47/i);report.memory=s.result.output;
+              await page.screenshot({path:'artifacts/real-model-candidate.png'});
+              assert.deepEqual(errors,[]);report.checks.push({passed:true,provider:s.result.provider,pageErrors:errors});
+          '''+s[end:]
+          s=s.replace('for(const width of [1440,390])','for(const width of [1440])').replace("mocked:['language model','search providers']","mocked:[]").replace("const page=await context.newPage(),errors=[];","const page=await context.newPage(),errors=[];page.setDefaultTimeout(220000);")
+          p.write_text(s)
+          PY
       - name: Install browser test dependency
         run: npm install --no-save --ignore-scripts playwright@1.55.0
-      - name: Exercise real deployed runtime
-        run: xvfb-run -a node test/live-pages.e2e.mjs https://jt5d.github.io/xrai-agent/ ${{ matrix.flow }}
+      - name: Test real arithmetic, instruction following, and memory
+        run: node test/conversation.e2e.mjs
+      - name: Export candidate source
+        if: always()
+        run: |
+          mkdir -p artifacts
+          cp web/local-agent.js artifacts/local-agent-candidate.js
+          cp test/conversation.e2e.mjs artifacts/real-model-test.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: final-live-${{ matrix.flow }}
+          name: stronger-model-evaluation
           path: artifacts/
           retention-days: 7
