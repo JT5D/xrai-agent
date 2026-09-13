@@ -43,13 +43,14 @@ jobs:
           await fs.writeFile(file,source.replace(needle,`const preferred=${JSON.stringify(profile)},`));
           const root=path.resolve('web'),report={profile,mocked:[],cases:[],errors:[]};
           const checkpoint=async()=>fs.writeFile('artifacts/inference.json',JSON.stringify(report,null,2));
+          await checkpoint();
           const timer=setTimeout(()=>{report.error='Hard 270s diagnostic deadline';checkpoint().finally(()=>process.exit(124));},270000);
           const server=http.createServer(async(req,res)=>{
             const url=new URL(req.url,'http://local'),p=path.resolve(root,'.'+url.pathname);
             const headers={'Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'require-corp','Cache-Control':'no-store'};
             if(url.pathname==='/probe'){res.writeHead(200,{...headers,'Content-Type':'text/html'});res.end('<title>Inference isolation</title>');return}
             if(!p.startsWith(root+path.sep)){res.writeHead(403);res.end();return}
-            try{res.writeHead(200,{...headers,'Content-Type':p.endsWith('.js')?'text/javascript':'text/plain'});res.end(await fs.readFile(p))}catch{res.writeHead(404);res.end()}
+            try{const body=await fs.readFile(p);res.writeHead(200,{...headers,'Content-Type':p.endsWith('.js')?'text/javascript':'text/plain'});res.end(body)}catch{res.writeHead(404,headers);res.end()}
           });
           await new Promise(r=>server.listen(0,'127.0.0.1',r));
           let browser;
