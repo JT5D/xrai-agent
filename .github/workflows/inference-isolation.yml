@@ -15,7 +15,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: 04599a7ab8f01744a4d535712d6172dad2f774cc
+          ref: 0b2b7f5a91b05d08933ba425eaaf11a927b77e29
           path: source
       - uses: actions/setup-node@v4
         with:
@@ -40,8 +40,8 @@ jobs:
         run: |
           git config user.name JT5D
           git config user.email jtunick@theimclab.com
-          git add web/browser-workspace.js test/browser-workspace.test.js test/patch-export.e2e.mjs
-          git commit -m 'Export applicable unified patches and verify browser downloads'
+          git add web/browser-workspace.js web/app.js web/index.html test/browser-workspace.test.js test/patch-export.e2e.mjs package.json README.md docs/STABILIZATION_2026-09-13.md
+          git commit -m 'Export applicable unified patches and expose downloads on mobile'
           git push origin HEAD:refs/heads/repair/patch-export-tested-3a7e1b18
           git rev-parse HEAD > artifacts/tested-commit.txt
           git diff HEAD^ HEAD > artifacts/reviewed-source.diff
