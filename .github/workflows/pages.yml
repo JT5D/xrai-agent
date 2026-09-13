@@ -8,6 +8,7 @@ on:
       - 'knowledge/**'
       - 'test/live-pages.e2e.mjs'
       - 'test/conversation.e2e.mjs'
+      - 'test/status.e2e.mjs'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -39,6 +40,7 @@ jobs:
           cp -R web/. _site/
           cp -R knowledge _site/knowledge
           touch _site/.nojekyll
+          node -e "require('fs').writeFileSync('_site/build-info.json',JSON.stringify({repo:process.env.GITHUB_REPOSITORY,sha:process.env.GITHUB_SHA,runId:Number(process.env.GITHUB_RUN_ID),version:require('./package.json').version,builtAt:new Date().toISOString()}))"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
@@ -102,6 +104,7 @@ jobs:
         run: |
           if [ "${{ matrix.flow }}" = "conversation" ]; then
             node test/conversation.e2e.mjs "${{ needs.deploy.outputs.page_url }}"
+            XRAI_STATUS_LIVE=1 node test/status.e2e.mjs "${{ needs.deploy.outputs.page_url }}"
           elif [ "${{ matrix.flow }}" = "repo" ] || [ "${{ matrix.flow }}" = "mobile-repo" ] || [ "${{ matrix.flow }}" = "model-runtime" ]; then
             xvfb-run -a node test/live-pages.e2e.mjs "${{ needs.deploy.outputs.page_url }}" "${{ matrix.flow }}"
           else
