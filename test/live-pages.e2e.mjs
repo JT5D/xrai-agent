@@ -17,12 +17,12 @@ async function userMessages(){return page.locator('#messages .msg.user .bubble p
 async function agentMessages(){return page.locator('#messages .msg.agent .bubble p').allTextContents()}
 async function waitForReady(timeout=60_000){
   await page.waitForSelector('#task',{timeout});
-  const end=Date.now()+timeout;
-  while(Date.now()<end){
-    try{if(await page.locator('#runButton').isEnabled())return}catch{}
-    await page.waitForTimeout(250);
-  }
-  throw new Error('Run button never became ready');
+  await page.waitForFunction(()=>{
+    const mode=document.querySelector('#modeLabel')?.textContent?.trim();
+    const run=document.querySelector('#runButton');
+    const welcome=document.querySelector('#messages .msg.agent .bubble p');
+    return Boolean(mode&&mode!=='detecting'&&run&&!run.disabled&&welcome);
+  },null,{timeout});
 }
 async function waitForNewResult(oldRun,timeout=240_000){
   const end=Date.now()+timeout;
@@ -57,7 +57,7 @@ try{
   await page.reload({waitUntil:'domcontentloaded',timeout:60_000});
   await waitForReady(60_000);
 
-  report.runtime=await page.evaluate(()=>({href:location.href,userAgent:navigator.userAgent,deviceMemory:navigator.deviceMemory??null,webgpu:Boolean(navigator.gpu),crossOriginIsolated:globalThis.crossOriginIsolated}));
+  report.runtime=await page.evaluate(()=>({href:location.href,userAgent:navigator.userAgent,deviceMemory:navigator.deviceMemory??null,webgpu:Boolean(navigator.gpu),crossOriginIsolated:globalThis.crossOriginIsolated,mode:document.querySelector('#modeLabel')?.textContent?.trim()||null}));
 
   // A. Normal chat: exact user message once, real model response, no silent hang.
   {
@@ -132,7 +132,7 @@ try{
     report.visibleProgress=await page.locator('#progressLabel').textContent().catch(()=>null);
     report.userMessages=await userMessages().catch(()=>[]);
     report.agentMessages=await agentMessages().catch(()=>[]);
-    report.runtime=report.runtime||await page.evaluate(()=>({href:location.href,userAgent:navigator.userAgent,deviceMemory:navigator.deviceMemory??null,webgpu:Boolean(navigator.gpu),crossOriginIsolated:globalThis.crossOriginIsolated})).catch(()=>null);
+    report.runtime=report.runtime||await page.evaluate(()=>({href:location.href,userAgent:navigator.userAgent,deviceMemory:navigator.deviceMemory??null,webgpu:Boolean(navigator.gpu),crossOriginIsolated:globalThis.crossOriginIsolated,mode:document.querySelector('#modeLabel')?.textContent?.trim()||null})).catch(()=>null);
     await page.screenshot({path:`${artifacts}/live-e2e-failure.png`,fullPage:true}).catch(()=>{});
   }
   throw error;
