@@ -46,12 +46,22 @@ test('slow loop updates evidence-driven meta guidance every ten runs',async()=>{
   const m=await getMetaPolicy(d);assert.equal(m.version,2);assert.equal(m.lastRunCount,10);assert.ok(m.guidance.some(x=>/Too many candidates/.test(x)));
 });
 
+test('verified challenger must measurably beat the incumbent before promotion',async()=>{
+  const d=await tmp();
+  const v1=await observeSkillCandidate(d,candidate,{task:'fix node tests',score:.94,verify:async()=> 'pass'});assert.equal(v1.status,'promoted');
+  const changed={...candidate,procedure:'Run type checking, inspect failures, then run project tests before accepting the change.',verifier:'npm run check'};
+  const weak=await observeSkillCandidate(d,changed,{task:'fix typed node tests',score:.94,verify:async()=> 'pass'});
+  assert.equal(weak.status,'candidate');assert.equal(weak.version,2);assert.equal(weak.baseline,.94);assert.match(weak.reason,/did not yet beat/);
+  const stronger=await observeSkillCandidate(d,changed,{task:'fix another typed node build',score:.98,verify:async()=> 'pass'});
+  assert.equal(stronger.status,'promoted');assert.equal(stronger.version,2);assert.ok(stronger.candidateScore>.94);
+});
+
 test('underperforming promoted version rolls back to prior proven version',async()=>{
   const d=await tmp();
   const v1=await observeSkillCandidate(d,candidate,{task:'fix node tests',score:.94,verify:async()=> 'pass'});assert.equal(v1.status,'promoted');
   const changed={...candidate,procedure:'Run type checking and then the deterministic project tests; inspect failures before accepting the change.',verifier:'npm run check'};
-  const v2=await observeSkillCandidate(d,changed,{task:'fix typed node tests',score:.95,verify:async()=> 'pass'});assert.equal(v2.status,'promoted');assert.equal(v2.version,2);
-  for(let i=0;i<5;i++)await recordSkillUsage(d,[{id:v2.id,version:2}],.2);
+  const v2=await observeSkillCandidate(d,changed,{task:'fix typed node tests',score:.96,verify:async()=> 'pass'});assert.equal(v2.status,'promoted');assert.equal(v2.version,2);
+  for(let i=0;i<3;i++)await recordSkillUsage(d,[{id:v2.id,version:2}],.2);
   for(let i=0;i<10;i++)await recordRunOutcome(d,{task:`failure ${i}`,score:.2,skills:[{id:v2.id,version:2}],candidateDecision:{status:'none'}});
   const hits=await retrieveSkills(d,'node repository tests',4);assert.ok(hits.some(x=>x.version===1));assert.ok(!hits.some(x=>x.version===2));
   const stats=await skillStats(d);assert.equal(stats.promoted,1);
