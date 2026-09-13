@@ -31,13 +31,16 @@ try{
   browser=await chromium.launch({channel:'chrome',headless:true});
   for(const width of [1440,390]){
     const context=await browser.newContext({viewport:{width,height:900},acceptDownloads:true});
+    const patch=buildChangeReport([{path:'src/sum.js',before,after}]);
+    await context.addInitScript(patch=>{
+      if(sessionStorage.getItem('patch-fixture-seeded'))return;
+      sessionStorage.setItem('patch-fixture-seeded','1');
+      localStorage.setItem('xrai-ui-v4',JSON.stringify({version:4,view:'workspace',lastTask:'Patch export QA fixture (not an AI-generated repair)',runStatus:'completed',statusText:'Export fixture ready',messages:[],events:[],result:{diff:patch,repo:'xrai-e2e/repair',output:'Patch export QA fixture only.',score:null,changedFiles:['src/sum.js']}}));
+    },patch);
     const page=await context.newPage(),errors=[],consoleErrors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',e=>{if(e.type()==='error')consoleErrors.push(e.text())});
     await page.goto(base);await page.waitForFunction(()=>document.querySelector('#modeLabel')?.textContent==='browser',null,{timeout:30000});
-    const patch=await page.evaluate(async({before,after})=>{
-      const {buildChangeReport}=await import('./browser-workspace.js'),{saveUiState,defaultUiState}=await import('./state.js');
-      const diff=buildChangeReport([{path:'src/sum.js',before,after}]);
-      saveUiState(localStorage,{...defaultUiState(),lastTask:'Patch export QA fixture (not an AI-generated repair)',runStatus:'completed',statusText:'Export fixture ready',result:{diff,repo:'xrai-e2e/repair',output:'Patch export QA fixture only.',score:null,changedFiles:['src/sum.js']}});return diff;
-    },{before,after});
+    const actual=await page.evaluate(async({before,after})=>{const {buildChangeReport}=await import('./browser-workspace.js');return buildChangeReport([{path:'src/sum.js',before,after}])},{before,after});
+    assert.equal(actual,patch,'Served exporter must match the tested code');
     await page.reload();await page.locator('#downloadPatch').waitFor({state:'visible'});
     assert.match(await page.title(),/XRAI/i);assert.ok((await page.locator('body').innerText()).length>200);
     const waiting=page.waitForEvent('download');await page.locator('#downloadPatch').click();const download=await waiting;const file=`artifacts/download-${width}.patch`;await download.saveAs(file);assert.equal(await download.failure(),null);
