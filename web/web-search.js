@@ -1,5 +1,6 @@
 const DEFAULT_LIMIT=8;
 const TIMEOUT_MS=4500;
+const PROVIDER_TIMEOUT_MS=5500;
 
 function clean(value=''){return String(value).replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim()}
 function dedupe(rows,limit=DEFAULT_LIMIT){
@@ -15,6 +16,11 @@ function dedupe(rows,limit=DEFAULT_LIMIT){
 async function timedFetch(url,fetchFn,timeout=TIMEOUT_MS){
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeout);
   try{return await fetchFn(url,{headers:{accept:'application/json,text/html;q=0.9,*/*;q=0.8'},signal:controller.signal,cache:'no-store'})}finally{clearTimeout(timer)}
+}
+async function bounded(promise,timeout,label){
+  let timer;
+  try{return await Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(`${label} timed out after ${timeout} ms`)),timeout)})])}
+  finally{clearTimeout(timer)}
 }
 function flattenDdg(topics,out=[]){
   for(const item of topics||[]){
@@ -52,10 +58,10 @@ async function jina(query,fetchFn){
   return rows;
 }
 
-export async function searchWeb(query,{fetchFn=globalThis.fetch,limit=DEFAULT_LIMIT}={}){
+export async function searchWeb(query,{fetchFn=globalThis.fetch,limit=DEFAULT_LIMIT,providerTimeoutMs=PROVIDER_TIMEOUT_MS}={}){
   const q=clean(query);if(!q)throw new Error('Web search query is empty.');if(typeof fetchFn!=='function')throw new Error('Fetch is unavailable in this runtime.');
   const started=Date.now(),providers=[jina,duckduckgo,wikipedia,hackerNews,github];
-  const settled=await Promise.allSettled(providers.map(fn=>fn(q,fetchFn)));
+  const settled=await Promise.allSettled(providers.map(fn=>bounded(fn(q,fetchFn),providerTimeoutMs,fn.name)));
   const results=dedupe(settled.flatMap(x=>x.status==='fulfilled'?x.value:[]),limit);
   const errors=settled.map((x,i)=>x.status==='rejected'?`${providers[i].name}: ${x.reason?.message||x.reason}`:null).filter(Boolean);
   return{query:q,results,providers:providers.length-errors.length,attemptedProviders:providers.length,latencyMs:Date.now()-started,errors};
