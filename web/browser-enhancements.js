@@ -1,5 +1,5 @@
 import { classifyBuiltinTask,isEvaluatorArtifact,runBuiltinTask } from './capability-tools.js';
-import { ACTIVE_CHAT_KEY,UI_STATE_KEY,ensureActiveChat,isChatTransitioning,listChats,newChat,restoreChat,snapshotChat,snapshotCurrentChat } from './conversation-store.js';
+import { ACTIVE_CHAT_KEY,UI_STATE_KEY,compareChats,ensureActiveChat,forkChat,isChatTransitioning,listChats,newChat,restoreChat,snapshotChat,snapshotCurrentChat } from './conversation-store.js';
 import { isRetryFollowup,lastMeaningfulUserTask,visibleTask } from './input-guard.js';
 
 const $=s=>document.querySelector(s);
@@ -98,16 +98,28 @@ function installLeakGuard(){
 function injectChatHistory(){
   const sidebar=document.querySelector('.sidebar');if(!sidebar||document.querySelector('#chatHistory'))return;
   const style=document.createElement('style');style.textContent=`
-    .chat-history{border-top:1px solid rgba(116,153,190,.18);padding:12px 9px 8px;margin-top:8px;min-height:0}.chat-history-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}.chat-history-head strong{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#8ea7c3}.chat-new{border:1px solid #274766;background:#0b1e32;color:#d7e9fb;border-radius:7px;padding:5px 8px;cursor:pointer;font-size:11px}.chat-history-list{display:grid;gap:4px;max-height:180px;overflow:auto}.chat-history-item{display:block;width:100%;text-align:left;border:0;background:transparent;color:#9fb5cc;border-radius:6px;padding:7px 8px;cursor:pointer;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.chat-history-item:hover,.chat-history-item.active{background:#112b47;color:#fff}.chat-history-time{display:block;font-size:9px;color:#617b95;margin-top:2px}
+    .chat-history{border-top:1px solid rgba(116,153,190,.18);padding:12px 9px 8px;margin-top:8px;min-height:0}.chat-history-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}.chat-history-head strong{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#8ea7c3}.chat-history-actions{display:flex;gap:4px}.chat-new,.chat-compare,.chat-fork{border:1px solid #274766;background:#0b1e32;color:#d7e9fb;border-radius:7px;padding:5px 7px;cursor:pointer;font-size:10px}.chat-history-list{display:grid;gap:4px;max-height:210px;overflow:auto}.chat-history-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px;align-items:center}.chat-history-item{display:block;width:100%;text-align:left;border:0;background:transparent;color:#9fb5cc;border-radius:6px;padding:7px 8px;cursor:pointer;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.chat-history-item:hover,.chat-history-item.active{background:#112b47;color:#fff}.chat-history-time{display:block;font-size:9px;color:#617b95;margin-top:2px}.chat-branch{color:#76b9ef}.chat-compare-panel{margin-top:8px;padding:8px;border:1px solid rgba(116,153,190,.18);border-radius:7px;background:rgba(10,29,48,.65);font-size:9px;color:#8ea7c3;line-height:1.45}.chat-compare-panel b{color:#d7e9fb}.chat-compare-panel[hidden]{display:none}
   `;document.head.append(style);
-  const wrap=document.createElement('section');wrap.id='chatHistory';wrap.className='chat-history';wrap.innerHTML='<div class="chat-history-head"><strong>Time Travel</strong><button class="chat-new" type="button">+ New</button></div><div class="chat-history-list"></div>';
+  const wrap=document.createElement('section');wrap.id='chatHistory';wrap.className='chat-history';wrap.innerHTML='<div class="chat-history-head"><strong>Time Travel</strong><div class="chat-history-actions"><button class="chat-compare" type="button" hidden>Compare parent</button><button class="chat-new" type="button">+ New</button></div></div><div class="chat-history-list"></div><div class="chat-compare-panel" hidden></div>';
   const agent=sidebar.querySelector('.agent-card');sidebar.insertBefore(wrap,agent||null);
   wrap.querySelector('.chat-new').addEventListener('click',()=>{if(newChat(localStorage,sessionStorage))location.reload()});
+  wrap.querySelector('.chat-compare').addEventListener('click',()=>renderBranchComparison());
   renderChatHistory();
 }
+function renderBranchComparison(){
+  const panel=document.querySelector('.chat-compare-panel'),active=localStorage.getItem(ACTIVE_CHAT_KEY),rows=listChats(localStorage),row=rows.find(x=>x.id===active);if(!panel||!row?.parentId)return;
+  const c=compareChats(localStorage,row.id,row.parentId);if(!c)return;
+  const pct=v=>v==null?'—':`${Math.round(v*100)}%`,delta=v=>v==null?'—':`${v>=0?'+':''}${Math.round(v*100)}%`;
+  panel.innerHTML=`<b>Branch vs parent</b><br>score ${pct(c.left.score)} vs ${pct(c.right.score)} (${delta(c.scoreDelta)})<br>attempts ${c.left.attempts??'—'} vs ${c.right.attempts??'—'} · events ${c.left.events} vs ${c.right.events}<br>provider ${c.left.provider||'—'} vs ${c.right.provider||'—'}<br>changed files ${c.left.changedFiles.length} vs ${c.right.changedFiles.length}<br><br><b>Branch result</b><br>${String(c.left.output||'No result yet').replace(/[<>]/g,'').slice(0,220)}<br><br><b>Parent result</b><br>${String(c.right.output||'No result yet').replace(/[<>]/g,'').slice(0,220)}`;panel.hidden=false;
+}
 function renderChatHistory(){
-  const list=document.querySelector('.chat-history-list');if(!list)return;list.innerHTML='';const active=localStorage.getItem(ACTIVE_CHAT_KEY),rows=listChats(localStorage);
-  for(const row of rows.slice(0,10)){const button=document.createElement('button');button.type='button';button.className=`chat-history-item${row.id===active?' active':''}`;button.title=`Resume ${row.title} from ${new Date(row.updatedAt||Date.now()).toLocaleString()}`;button.textContent=row.title;const time=document.createElement('span');time.className='chat-history-time';time.textContent=new Date(row.updatedAt||Date.now()).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});button.append(time);button.addEventListener('click',()=>{if(row.id===active)return;if(restoreChat(localStorage,row.id,sessionStorage))location.reload()});list.append(button)}
+  const list=document.querySelector('.chat-history-list'),compare=document.querySelector('.chat-compare'),panel=document.querySelector('.chat-compare-panel');if(!list)return;list.innerHTML='';if(panel)panel.hidden=true;const active=localStorage.getItem(ACTIVE_CHAT_KEY),rows=listChats(localStorage),activeRow=rows.find(x=>x.id===active);if(compare)compare.hidden=!activeRow?.parentId;
+  for(const row of rows.slice(0,10)){
+    const wrap=document.createElement('div');wrap.className='chat-history-row';
+    const button=document.createElement('button');button.type='button';button.className=`chat-history-item${row.id===active?' active':''}`;button.title=`Resume ${row.title} from ${new Date(row.updatedAt||Date.now()).toLocaleString()}`;button.textContent=`${row.parentId?'↳ ':''}${row.title}`;if(row.parentId)button.classList.add('chat-branch');const time=document.createElement('span');time.className='chat-history-time';time.textContent=new Date(row.updatedAt||Date.now()).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});button.append(time);button.addEventListener('click',()=>{if(row.id===active)return;if(restoreChat(localStorage,row.id,sessionStorage))location.reload()});
+    const fork=document.createElement('button');fork.type='button';fork.className='chat-fork';fork.textContent='Fork';fork.title='Branch from this exact point';fork.addEventListener('click',()=>{if(forkChat(localStorage,row.id,sessionStorage))location.reload()});
+    wrap.append(button,fork);list.append(wrap);
+  }
   if(!rows.length){const empty=document.createElement('span');empty.className='chat-history-item';empty.textContent='Current chat';list.append(empty)}
 }
 function installHistoryJournal(){
