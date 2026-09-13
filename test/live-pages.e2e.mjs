@@ -173,7 +173,7 @@ async function runWeb(){
   require(events.some(e=>e.name==='web_search'||/web search/i.test(String(e.summary||''))),'web research recorded no web_search execution event');
   require(/https?:\/\//.test(output),'web research output contained no source URL');
   const evidence=events.find(e=>e.name==='web_search'&&e.type==='tool:done')?.data;
-  require(evidence?.results?.some(row=>/model.?context.?protocol/i.test(`${row?.title||''} ${row?.url||''} ${row?.snippet||''}`)),'web research returned URLs but no result relevant to Model Context Protocol');
+  require(evidence?.results?.some(row=>/model.?context.?protocol/i.test(typeof row==='string'?row:`${row?.title||''} ${row?.url||''} ${row?.snippet||''}`)),'web research returned URLs but no result relevant to Model Context Protocol');
   require(Number(evidence?.contributingProviders)>0,'web research reported no contributing provider');
   report.flows.web={ok:true,provider:result.result?.provider,runId:result.result?.runId,output:output.slice(0,700)};
   checkpoint('web:done');
