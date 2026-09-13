@@ -12,7 +12,7 @@ const yieldToBrowser=()=>new Promise(resolve=>{if(typeof requestAnimationFrame==
 const uid=()=>globalThis.crypto?.randomUUID?.()||`xrai-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
 const RETRY_PENDING_KEY='xrai-retry-pending-v1';
 let ui=loadUiState(localStorage);
-try{if(sessionStorage.getItem(CHAT_SWITCH_KEY))sessionStorage.removeItem(CHAT_SWITCH_KEY)}catch{}
+try{sessionStorage.removeItem(CHAT_SWITCH_KEY);sessionStorage.removeItem(RETRY_PENDING_KEY)}catch{}
 let mode='detecting';
 let capabilities=null;
 let sse=null;
@@ -22,7 +22,7 @@ let activeSubmission=null;
 const welcome={id:'welcome',role:'agent',text:'Give me a task. On compatible modern browsers I can inspect, test, and repair public Node/JS/TS repositories in an isolated zero-install browser sandbox. Mobile support is beta and memory-limited. I report real command evidence and never fabricate repo access.',ts:Date.now(),runId:null};
 if(!ui.messages.length)ui.messages=[welcome];
 
-function persist(){try{if(sessionStorage.getItem(CHAT_SWITCH_KEY)||sessionStorage.getItem(RETRY_PENDING_KEY))return}catch{}ui=saveUiState(localStorage,ui)}
+function persist(){try{if(sessionStorage.getItem(CHAT_SWITCH_KEY))return}catch{}ui=saveUiState(localStorage,ui)}
 function escTime(ts){try{return new Date(ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}catch{return''}}
 function makeEvent(type,summary,extra={}){return{id:uid(),runId:ui.activeRunId||uid(),ts:Date.now(),type,summary,...extra}}
 function activeEvents(){return ui.events.filter(e=>e.runId===ui.activeRunId)}
@@ -221,7 +221,7 @@ async function runServer(task){
 async function runBrowser(task,context,live){
   const emit=event=>{if(live())acceptEvent({...event,runId:activeSubmission.runId})};
   const progress=message=>{if(live()){$('#status').textContent=message;ui.statusText=message;persist()}};
-  const inherited=isContinuation(task)&&context.goal?context.goal:task;
+  const inherited=isRetryFollowup(task)&&context.goal?context.goal:task;
   const builtinKind=classifyBuiltinTask(inherited);
   const execute=executionIntent(task,context)&&!['capabilities','capabilities+web','self-improvement-proof'].includes(builtinKind);
   let research=null;

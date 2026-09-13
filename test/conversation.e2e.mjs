@@ -23,7 +23,7 @@ try{
     // Bypass only service-worker registration; app module loading remains real.
     await page.route('**/coi-bootstrap.js*',async route=>route.fulfill({contentType:'text/javascript',body:"(async()=>{for(const f of ['input-guard.js','browser-enhancements.js','event-inspector.js','policy-inspector.js','improvement-guard.js','app.js'])await import('./'+f)})()"}));
     await page.addInitScript(()=>{
-      globalThis.testPrompts=[];
+      sessionStorage.setItem('xrai-retry-pending-v1','legacy-run');globalThis.testPrompts=[];
       const session=()=>({clone:async()=>session(),destroy(){},async prompt(text){
         globalThis.testPrompts.push(String(text));await new Promise(r=>setTimeout(r,250));
         return 'This is a proposed plan, not an executed change.';
@@ -54,7 +54,7 @@ try{
     const prompts=await page.evaluate(()=>globalThis.testPrompts);assert.equal(prompts.length,2);assert.match(prompts[1],/prevent duplicate replies/);
     assert.ok(s.messages.every(m=>!m.text.includes('Previous XRAI context')));
     await send('research similar popular repos and recommend improvements');
-    await send('did self improvements happen?');
+    s=await send('did self improvements happen?');assert.match(s.result.output,/0 verified/i,'status question must report evidence, not rerun research');assert.equal(await page.evaluate(()=>sessionStorage.getItem('xrai-retry-pending-v1')),null);
     s=await send('Summarize what we discussed.');
     assert.match((await page.evaluate(()=>globalThis.testPrompts)).at(-1),/research similar popular repos/);
     assert.equal(s.messages.filter(m=>m.role==='user').length,5);assert.equal(s.messages.filter(m=>m.role==='agent'&&m.id!=='welcome').length,5);
