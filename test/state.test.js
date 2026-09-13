@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { UI_STATE_KEY,defaultUiState,isConstrainedDevice,loadUiState,saveUiState,taskNeedsExecutionHost } from '../web/state.js';
+import { UI_STATE_KEY,UI_STATE_VERSION,defaultUiState,isConstrainedDevice,loadUiState,saveUiState,taskNeedsExecutionHost } from '../web/state.js';
 
 class MemoryStorage{
   constructor(){this.map=new Map()}
@@ -15,12 +15,18 @@ test('repo and test tasks require an execution host while ordinary chat does not
   assert.equal(taskNeedsExecutionHost('Explain evidence-gated skill learning simply'),false);
 });
 
-test('UI state survives a reload with task, messages, events, and running status intact',()=>{
+test('UI state v4 survives a reload with task, messages, events, and running status intact',()=>{
   const storage=new MemoryStorage(),state=defaultUiState();
+  assert.equal(UI_STATE_VERSION,4);
   state.lastTask='persistent task';state.runStatus='running';state.activeRunId='run-1';state.messages=[{id:'m1',role:'user',text:'persistent task'}];state.events=[{id:'e1',runId:'run-1',type:'run:start',summary:'persistent task'}];
   saveUiState(storage,state);
   const loaded=loadUiState(storage);
   assert.equal(loaded.lastTask,'persistent task');assert.equal(loaded.runStatus,'running');assert.equal(loaded.activeRunId,'run-1');assert.equal(loaded.messages.length,1);assert.equal(loaded.events.length,1);assert.ok(storage.getItem(UI_STATE_KEY));
+});
+
+test('old v3 state is intentionally ignored by the v4 state loader',()=>{
+  const storage=new MemoryStorage();storage.setItem('xrai-ui-v3',JSON.stringify({version:3,lastTask:'stale'}));
+  assert.equal(loadUiState(storage).lastTask,'');
 });
 
 test('mobile and low-memory devices select constrained behavior',()=>{
