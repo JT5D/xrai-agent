@@ -75,9 +75,12 @@ test('public graph ships exact provenance binding plus interactive X-ray inspect
   assert.match(html,/X-ray View/);assert.match(html,/God's-eye view/);assert.match(history,/Time Travel/);
 });
 
-test('browser enhancement layer has no perpetual main-thread polling',async()=>{
+test('browser enhancement layer has no perpetual polling or duplicate raw UI parser',async()=>{
   const history=await fs.readFile(new URL('../web/browser-enhancements.js',import.meta.url),'utf8');
   assert.doesNotMatch(history,/setInterval/);
+  assert.doesNotMatch(history,/JSON\.parse\(localStorage\.getItem/);
+  assert.match(history,/loadUiState/);
+  assert.match(history,/saveUiState/);
   assert.match(history,/requestIdleCallback/);
   assert.match(history,/visibilitychange/);
   assert.match(history,/MutationObserver/);
