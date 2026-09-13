@@ -98,7 +98,7 @@ jobs:
       - name: Exercise deployed ${{ matrix.flow }} flow
         shell: bash
         run: |
-          if [ "${{ matrix.flow }}" = "repo" ]; then
+          if [ "${{ matrix.flow }}" = "repo" ] || [ "${{ matrix.flow }}" = "chat-retry" ]; then
             xvfb-run -a node test/live-pages.e2e.mjs "${{ needs.deploy.outputs.page_url }}" "${{ matrix.flow }}"
           else
             node test/live-pages.e2e.mjs "${{ needs.deploy.outputs.page_url }}" "${{ matrix.flow }}"
