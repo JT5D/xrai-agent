@@ -25,7 +25,9 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
@@ -71,28 +73,35 @@ jobs:
               && ! printf '%s' "$enhancements" | grep -Fq 'setInterval' \
               && printf '%s' "$state" | grep -Fq 'MAX_UI_STATE_CHARS'; then
               echo "Verified live XRAI Agent ${expected} browser runtime and stability guards at ${base}"
-              break
-            fi
-            if [ "$attempt" = 10 ]; then
-              echo "Live Pages runtime did not match the deployed XRAI browser bundle for ${expected}." >&2
-              exit 1
+              exit 0
             fi
             sleep 3
           done
+          echo "Live Pages runtime did not match the deployed XRAI browser bundle for ${expected}." >&2
+          exit 1
+
+  live-e2e:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        flow: [chat-retry, web, repo]
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Install Chromium E2E runner
-        run: |
-          npm install --no-save --ignore-scripts playwright@1.55.0
-          npx playwright install --with-deps chromium
-      - name: Exercise live user critical path
-        run: node test/live-pages.e2e.mjs "${{ steps.deployment.outputs.page_url }}"
-      - name: Upload live E2E evidence
+      - name: Install Playwright runner
+        run: npm install --no-save --ignore-scripts playwright@1.55.0
+      - name: Exercise deployed ${{ matrix.flow }} flow
+        run: node test/live-pages.e2e.mjs "${{ needs.deploy.outputs.page_url }}" "${{ matrix.flow }}"
+      - name: Upload ${{ matrix.flow }} browser evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: live-pages-e2e
+          name: live-pages-e2e-${{ matrix.flow }}
           path: artifacts/
-          if-no-files-found: ignore
+          if-no-files-found: warn
           retention-days: 7
