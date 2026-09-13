@@ -15,10 +15,12 @@ let browser;
 let page;
 let finished=false;
 
+function diagnosticSummary(){return{heartbeatAgeMs:report.lastHeartbeat?Date.now()-report.lastHeartbeat:null,error:report.error||null,lastNetwork:report.networkEvents.slice(-12),lastNavigation:report.navigations.at(-1)||null,lastSubmit:report.submitProbes.at(-1)||null}}
 function checkpoint(phase){
   report.phase=phase;report.updatedAt=new Date().toISOString();
   fsSync.writeFileSync(reportPath,JSON.stringify(report,null,2));
   console.log(`[live-e2e:${flow}] ${phase}`);
+  if(phase==='hard-timeout'||phase==='failed'||phase.startsWith('cancelled:'))console.log(`[live-e2e:${flow}:diagnostic] ${JSON.stringify(diagnosticSummary())}`);
 }
 function timeoutError(label,ms){return new Error(`${label} timed out after ${Math.round(ms/1000)}s`)}
 async function within(promise,label,ms){
@@ -79,15 +81,16 @@ async function submit(text,timeout){
   }),'install submit probe',3000);
   await within(page.locator('#task').fill(text,{timeout:5000}),'fill task',6000);
   probe.beforeClick=await within(page.evaluate(()=>({value:document.querySelector('#task')?.value||'',disabled:Boolean(document.querySelector('#runButton')?.disabled),mode:document.querySelector('#modeLabel')?.textContent?.trim()||'',probe:globalThis.__xraiE2EProbe||null})),'pre-click probe',3000);
+  report.submitProbes.push(probe);
   await within(page.locator('#runButton').click({noWaitAfter:true,timeout:5000}),'submit click',6000);
   const registered=await waitForTaskRegistration(text,3000);
   probe.afterClick={href:page.url(),state:await safe(state()),dom:await safe(page.evaluate(()=>({value:document.querySelector('#task')?.value||'',disabled:Boolean(document.querySelector('#runButton')?.disabled),probe:globalThis.__xraiE2EProbe||null}))),registered:Boolean(registered)};
   if(!registered){
     const heartbeatAge=report.lastHeartbeat?Date.now()-report.lastHeartbeat:null;
-    probe.heartbeatAgeMs=heartbeatAge;report.submitProbes.push(probe);checkpoint('submit:not-registered');
+    probe.heartbeatAgeMs=heartbeatAge;checkpoint('submit:not-registered');
     throw new Error(`User click did not register task state within 3s; browser heartbeat age=${heartbeatAge??'unknown'}ms`);
   }
-  report.submitProbes.push(probe);checkpoint('submit:registered');
+  checkpoint('submit:registered');
   return waitForNewResult(oldRun,timeout);
 }
 function require(condition,message){if(!condition)throw new Error(message)}
