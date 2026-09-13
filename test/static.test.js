@@ -63,11 +63,16 @@ test('public browser version and cache-busted runtime assets stay synchronized',
   for(const asset of ['coi-bootstrap.js','static-runtime.js','input-guard.js','browser-enhancements.js','event-inspector.js','policy-inspector.js','improvement-guard.js','app.js'])assert.match(html,new RegExp(`${asset.replace('.','\\.')}\\?v=${version}`));
 });
 
-test('public graph ships hover, expand, inspector, fit, zoom, pan, keyboard interaction, and policy evolution',async()=>{
+test('public graph ships exact provenance binding plus interactive X-ray inspection',async()=>{
+  const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
   const inspector=await fs.readFile(new URL('../web/event-inspector.js',import.meta.url),'utf8');
   const policy=await fs.readFile(new URL('../web/policy-inspector.js',import.meta.url),'utf8');
-  assert.match(inspector,/graph-tooltip/);assert.match(inspector,/dblclick/);assert.match(inspector,/toggleExpanded/);assert.match(inspector,/fitGraph/);assert.match(inspector,/pointerdown/);assert.match(inspector,/data-event-id|eventId/);assert.match(inspector,/aria-label/);assert.match(inspector,/highlightPath/);
+  const html=await fs.readFile(new URL('../web/index.html',import.meta.url),'utf8');
+  const history=await fs.readFile(new URL('../web/browser-enhancements.js',import.meta.url),'utf8');
+  assert.match(app,/eventId/);assert.match(app,/dataset\.eventId/);assert.match(inspector,/events\.find\(e=>e\.id===n\.dataset\.eventId\)/);assert.match(inspector,/X-ray provenance/);
+  assert.match(inspector,/graph-tooltip/);assert.match(inspector,/dblclick/);assert.match(inspector,/toggleExpanded/);assert.match(inspector,/fitGraph/);assert.match(inspector,/pointerdown/);assert.match(inspector,/aria-label/);assert.match(inspector,/highlightPath/);
   assert.match(policy,/Orchestration policy evolution/);assert.match(policy,/Promotion \/ rollback decisions/);assert.match(policy,/Comparable evidence only/);
+  assert.match(html,/X-ray View/);assert.match(html,/God's-eye view/);assert.match(history,/Time Travel/);
 });
 
 test('public browser has integrated zero-install repo execution',async()=>{
