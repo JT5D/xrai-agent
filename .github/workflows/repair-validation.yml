@@ -54,17 +54,20 @@ jobs:
           mkdir -p artifacts
           cp source-checks.txt artifacts/ || true
           tar --exclude=node_modules --exclude=.git --exclude=artifacts -czf artifacts/source.tar.gz README.md package.json src web test knowledge .github
-      - name: Create tested commit without repair infrastructure
+      - name: Publish source for authorized workflow update
         if: success()
         run: |
           git config user.name JT5D
           git config user.email jtunick@theimclab.com
           git rm --ignore-unmatch .repair.json .github/workflows/repair-validation.yml
           git add web test package.json README.md .github/workflows/pages.yml
+          git write-tree > artifacts/validated-tree.txt
+          git show 69c3440e4368820147de9ee8c53de6f92cc1fc08:.github/workflows/pages.yml > .github/workflows/pages.yml
+          git add .github/workflows/pages.yml
           tree=$(git write-tree)
           commit=$(printf '%s\n' 'Fix conversation context, serialized execution, research relevance and evidence integrity' | git commit-tree "$tree" -p 69c3440e4368820147de9ee8c53de6f92cc1fc08)
           git push origin "$commit:refs/heads/repair/context-isolated-tested-9100b6"
-          printf '%s\n' "$commit" > artifacts/tested-commit.txt
+          printf '%s\n' "$commit" > artifacts/tested-source-commit.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
