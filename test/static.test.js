@@ -1,2 +1,15 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';
-test('static Pages build has no-key local inference fallback',async()=>{const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');const local=await fs.readFile(new URL('../web/local-agent.js',import.meta.url),'utf8');const html=await fs.readFile(new URL('../web/index.html',import.meta.url),'utf8');assert.match(app,/runLocalTask/);assert.match(local,/LanguageModel/);assert.match(local,/LFM2\.5-350M-ONNX/);assert.match(local,/xrai-lessons/);assert.match(html,/\.\/app\.js/);assert.doesNotMatch(html,/src="\/app\.js"/)});
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import { extractEval } from '../web/local-agent.js';
+
+test('static Pages build has no-key local inference and v2 skill learning',async()=>{
+  const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
+  const local=await fs.readFile(new URL('../web/local-agent.js',import.meta.url),'utf8');
+  const html=await fs.readFile(new URL('../web/index.html',import.meta.url),'utf8');
+  assert.match(app,/runLocalTask/);assert.match(local,/LanguageModel/);assert.match(local,/LFM2\.5-350M-ONNX/);assert.match(local,/xrai-skills-v2/);assert.match(local,/supportNeeded/);assert.match(html,/\.\/app\.js/);assert.doesNotMatch(html,/src="\/app\.js"/);
+});
+
+test('browser evaluator parse failure is fail-closed and cannot promote learning',()=>{
+  const ev=extractEval('not valid evaluator json');assert.equal(ev.score,0);assert.equal(ev.skill.title,'');
+});

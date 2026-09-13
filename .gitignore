@@ -1,6 +1,5 @@
 node_modules/
 dist/
 .env
-.xrai/memory.jsonl
-.xrai/runs/
+.xrai/
 .DS_Store

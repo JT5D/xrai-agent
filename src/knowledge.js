@@ -8,5 +8,4 @@ export async function searchKnowledge(query,roots,limit=5){
   for(const file of files){let text;try{text=await fs.readFile(file,'utf8')}catch{continue}for(const chunk of text.split(/\n(?=#{1,4}\s)|\n{2,}/).filter(Boolean)){const c=tokens(chunk),overlap=q.filter(t=>c.includes(t)).length;if(overlap)hits.push({source:file,text:chunk.slice(0,1800),score:overlap/Math.max(1,q.length)})}}
   return hits.sort((a,b)=>b.score-a.score).slice(0,limit);
 }
-export async function appendLesson(root,lesson){const dir=path.join(root,'.xrai');await fs.mkdir(dir,{recursive:true});await fs.appendFile(path.join(dir,'memory.jsonl'),JSON.stringify({...lesson,ts:new Date().toISOString()})+'\n')}
 export async function syncXraiKnowledge(dest){const base='https://raw.githubusercontent.com/JT5D/xrai/main/knowledge/';const names=['MISSION.md','KEY_LEARNINGS.md','SYSTEM_PATTERNS.md','AGENTIC_CODING_EVALS_2025_2026.md','UNVERIFIED.md'];await fs.mkdir(dest,{recursive:true});for(const name of names){const r=await fetch(base+name);if(!r.ok)throw new Error(`Failed ${name}: ${r.status}`);await fs.writeFile(path.join(dest,name),await r.text())}return names}

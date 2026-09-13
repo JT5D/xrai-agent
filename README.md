@@ -1,220 +1,352 @@
-# XRAI Agent
+# XRAI Agent v0.2
 
-A deliberately small, transparent, recursively improving AI agent: **zero runtime npm dependencies**, one execution kernel, one observable event stream, and thin interfaces for terminal, browser, ChatGPT, and Claude Code.
+A deliberately small, transparent recursive AI agent with **evidence-gated skill evolution**.
 
-**No API key is required.** Keys are an optional upgrade, never a prerequisite.
+- zero runtime npm dependencies
+- one execution kernel
+- local/browser/host-model operation
+- versioned reusable skills instead of free-form memory
+- fast skill learning + slower evidence-driven meta-learning
+- deterministic promotion, rejection, and rollback rules
+- observable execution events, never private chain-of-thought
 
-- **Browser / GitHub Pages:** runs on-device using Chrome built-in AI when available, otherwise a small WebGPU model via Transformers.js.
-- **CLI:** uses a local Ollama model when available.
-- **ChatGPT / Claude Code:** the host chat model can orchestrate XRAI directly through MCP, so XRAI itself needs no model key.
-- **Optional OpenAI key:** enables the hosted Responses API + hosted web search for standalone server/CLI runs.
+**No model API key is required.** A hosted OpenAI key is optional.
 
-The UI shows observable execution events (agents, tools, retrieval, evaluation, retries, learning). It does **not** expose or pretend to expose a model's private chain-of-thought.
-
-## Why this architecture
-
-The goal is maximum capability per line of code, not an agent framework inside an agent framework.
-
-- **One kernel:** `src/kernel.js`
-- **Three local tools:** shell, knowledge search, bounded delegation
-- **Optional hosted web search:** only when an OpenAI key is present
-- **One recursive quality loop:** act -> evaluate -> retry if needed -> retain verified lesson
-- **One live event bus:** every visible interface observes the same real events
-- **No vector DB / graph DB / queue / swarm service:** Markdown + JSONL/localStorage are enough for v0.1
-- **MCP:** the same tool surface works from ChatGPT or Claude Code
-
-## Fastest start — no key
-
-### Browser
-
-Use the live GitHub Pages build:
+Live no-key browser build:
 
 ```text
 https://jt5d.github.io/xrai-agent/
 ```
 
-The first message may trigger an on-device model download. Chrome's built-in Prompt API is used first when available; otherwise XRAI falls back to `onnx-community/LFM2.5-350M-ONNX` through Transformers.js/WebGPU. Model files are cached by the browser.
+## What changed in v0.2
 
-### Local browser
+v0.1 learned by saving one evaluator-written lesson after a high-scoring run. v0.2 replaces that with a stricter lifecycle:
 
-```bash
-git clone https://github.com/JT5D/unrepo.git xrai-agent
-cd xrai-agent
-node src/cli.js web
+```text
+task
+  ↓
+retrieve promoted skills only
+  ↓
+execute + verify
+  ↓
+evaluate
+  ↓
+propose narrow candidate skill
+  ↓
+┌──────────────────────────────────────────────┐
+│ safe concrete verifier available?            │
+│   yes → execute verifier → pass/fail          │
+│   no  → require repeated distinct successes   │
+└──────────────────────────────────────────────┘
+  ↓
+promote / keep candidate / reject
+  ↓
+measure future utility
+  ↓
+slow meta-maintenance every 10 runs
+  ↓
+retain / supersede / roll back
 ```
 
-Open `http://127.0.0.1:8787`. If there is no OpenAI key and no local Ollama model, the browser still works in no-key on-device mode.
+A model is never allowed to promote a skill merely because it says the skill is good.
 
-### CLI — no key
+## Learning rules
 
-If Ollama is already installed and has a model, XRAI uses it automatically:
+### Fast loop
+
+After each successful run:
+
+1. The evaluator may propose one reusable skill with:
+   - title
+   - trigger
+   - procedure
+   - optional verifier command
+   - tags
+2. Scores below `0.82` cannot learn.
+3. If score is at least `0.86` and the verifier is an allowlisted test/check/lint/build command, XRAI executes it.
+4. A passing verifier can promote the skill immediately.
+5. A failing verifier rejects the candidate.
+6. Without executable evidence, a candidate needs successful support from **two distinct task fingerprints** before promotion.
+7. Candidate and rejected skills are never returned by normal retrieval.
+
+Browser-only mode cannot execute workspace shell verifiers, so it always uses the repeated-support gate.
+
+### Slow loop
+
+Every 10 completed runs, XRAI evaluates aggregate evidence:
+
+- average run score
+- candidate/promotion rate
+- failure rate when retrieved skills were used
+- utility of promoted skill versions
+
+It updates compact meta-guidance for future skill creation/retrieval. A promoted version with at least five uses and under 40% success is rolled back; a prior proven version is restored when available.
+
+The slow loop changes **learning guidance and skill state**, not trusted kernel code.
+
+## Retrieval
+
+Promoted skills are ranked by a transparent hybrid score:
+
+- task relevance
+- confidence
+- measured utility
+- recency
+
+The Markdown XRAI knowledgebase remains separate. Raw `.xrai/skills.jsonl` history is audit-only and is deliberately excluded from generic knowledge search, preventing unpromoted candidates from leaking back into context.
+
+## Privacy and memory
+
+CLI/server learning is append-only in:
+
+```text
+.xrai/skills.jsonl
+```
+
+The browser uses localStorage:
+
+```text
+xrai-skills-v2
+xrai-meta-v2
+xrai-runs-v2
+```
+
+XRAI stores compact skill procedures and hashed task fingerprints, not task outputs. Credential/private-key/email-shaped candidate memory is rejected. Evaluators are also instructed never to put secrets or personal data into skills.
+
+## No-key modes
+
+### Public browser
+
+Open:
+
+```text
+https://jt5d.github.io/xrai-agent/
+```
+
+The browser tries Chrome built-in AI first. When unavailable it falls back to:
+
+```text
+onnx-community/LFM2.5-350M-ONNX
+```
+
+through Transformers.js/WebGPU. The first use may download and cache the local model.
+
+### Local CLI with Ollama
 
 ```bash
 ollama pull qwen3:0.6b
 node src/cli.js chat
 ```
 
-No model SDK is installed into XRAI; it talks to Ollama's local HTTP API directly. `XRAI_LOCAL_MODEL` selects a specific installed model.
+XRAI talks directly to Ollama's local HTTP API and installs no model SDK.
 
-## Optional hosted model
-
-For stronger standalone autonomous runs, set an OpenAI key:
+### Local web UI
 
 ```bash
-export OPENAI_API_KEY="your-key"
+node src/cli.js web
+```
+
+Open:
+
+```text
+http://127.0.0.1:8787
+```
+
+The same server exposes MCP at:
+
+```text
+http://127.0.0.1:8787/mcp
+```
+
+## Optional hosted OpenAI mode
+
+```bash
+export OPENAI_API_KEY="..."
 export XRAI_MODEL=gpt-5.6-luna
 node src/cli.js chat
 ```
 
-When present, the key enables the OpenAI Responses API and hosted web search. Without it, XRAI uses local/browser/host-model paths above.
+This enables the hosted Responses API and hosted web search. It is an upgrade path, not a requirement.
 
-## Two browser interfaces
+## Claude Code — no separate XRAI model key
 
-### Chat
-The fastest normal interface. Ask a task and receive the final answer.
-
-### Control Room
-A live, deterministic execution DAG showing:
-
-- parent and child agents
-- model/provider state
-- XRAI knowledge hits
-- tool activity
-- evaluator score
-- retries
-- retained verified lessons
-
-Users can tune child-agent count and evaluator retries. Server mode also exposes recursion depth and workspace settings. The graph displays **observable events and outputs**, not hidden chain-of-thought.
-
-## Claude Code via MCP — no model key required
-
-From the standalone repo:
+From the repo root:
 
 ```bash
 claude mcp add --transport stdio --scope project xrai -- node "$PWD/src/cli.js" mcp
 claude mcp get xrai
 ```
 
-The MCP exposes:
+Claude Code can be the reasoning host and directly use XRAI's tools.
 
-- `xrai_shell` — workspace-rooted execution
-- `xrai_knowledge` — XRAI KB + verified lessons
-- `xrai_run` — complete recursive XRAI run; uses OpenAI when configured, otherwise local Ollama
+## ChatGPT
 
-Claude Code itself can be the model/orchestrator and call `xrai_shell` + `xrai_knowledge`, so no second model API is necessary.
+ChatGPT connects to remote MCP servers; it does not directly connect to a localhost MCP endpoint. For a local/private XRAI server, use OpenAI's Secure MCP Tunnel.
 
-## ChatGPT via MCP — no model key required
-
-ChatGPT connects to **remote** MCP servers, not ordinary localhost stdio servers. Run XRAI locally:
+On macOS, the current supported install path is:
 
 ```bash
-node src/cli.js web
+brew install openai/tools/tunnel-client
+tunnel-client help quickstart
 ```
 
-Its Streamable-HTTP-style endpoint is:
+Tunnel provisioning requires the applicable OpenAI tunnel/runtime credentials. That credential is for the tunnel transport; **XRAI itself still does not require a model API key**.
+
+After the tunnel is healthy, create/enable the custom MCP app in ChatGPT and point it at the tunnel-backed MCP endpoint. Current OpenAI guidance is documented at:
 
 ```text
-http://127.0.0.1:8787/mcp
+https://developers.openai.com/api/docs/guides/secure-mcp-tunnels
+https://help.openai.com/en/articles/12584461
 ```
 
-Use ChatGPT's **Secure MCP Tunnel** to connect that local endpoint without exposing your machine to the public internet. Then create/enable the XRAI custom app in ChatGPT and invoke it from normal chats. ChatGPT supplies the reasoning model; XRAI supplies knowledge/tools, so no XRAI API key is needed.
+Do not expose `xrai_shell` as a public unauthenticated endpoint. XRAI binds to `127.0.0.1` by default.
 
-Do **not** expose `xrai_shell` as a public unauthenticated internet endpoint. The default server binds to `127.0.0.1` intentionally.
+## MCP tools
 
-## Self-improvement, without uncontrolled self-modification
+v0.2 exposes four tools:
 
-After a run:
+- `xrai_run` — complete recursive run with evidence-gated learning
+- `xrai_shell` — workspace-rooted shell execution
+- `xrai_knowledge` — XRAI knowledge + promoted skills only
+- `xrai_skills` — inspect skill counts, active versions, and meta-policy
 
-1. The evaluator grades task completion from 0–1.
-2. Below `0.82`, the root agent gets targeted feedback and retries, bounded by configuration.
-3. At `>= 0.82`, one reusable lesson can be retained.
-4. Future knowledge retrieval includes those verified lessons.
-
-Storage:
-
-- CLI/server: `.xrai/memory.jsonl`
-- GitHub Pages/browser: `localStorage` on the user's device
-
-This is **experience/skill improvement**, not blind rewriting of the agent's core code. Code changes still need tests and version control.
-
-## XRAI knowledgebase
-
-The package ships a synced seed under `knowledge/`; the local server and GitHub Pages deployment expose that same seed to the browser under `/knowledge/`. Refresh it directly from `JT5D/xrai/knowledge`:
+## CLI
 
 ```bash
+node src/cli.js chat
+node src/cli.js run "task"
+node src/cli.js web
+node src/cli.js mcp
+node src/cli.js skills
 node src/cli.js sync
 ```
 
-Retrieval is intentionally tiny: token-overlap ranking over Markdown/JSONL chunks. For the current KB size this stays transparent, portable, and debuggable. Add a vector or graph database only if measured scale/retrieval quality proves it necessary.
+## Control Room
 
-## Knowledge graph
+The browser UI shows observable execution state:
 
-Events and lessons have explicit IDs, parent-agent links, types, sources, scores, and tags. The browser renders execution as a deterministic layered DAG rather than a decorative force graph, preserving causal order and parent/child delegation.
+- parent/child agents
+- tool activity
+- knowledge retrieval
+- promoted-skill retrieval
+- evaluator score
+- retries
+- candidate/promotion/rejection events
+- slow meta-learning events
+- current learning status and meta version
 
-## Configuration
-
-```bash
-# optional hosted provider
-export OPENAI_API_KEY=...
-export XRAI_MODEL=gpt-5.6-luna
-export XRAI_REASONING=low
-
-# optional no-key local provider
-export OLLAMA_HOST=http://127.0.0.1:11434
-export XRAI_LOCAL_MODEL=qwen3:0.6b
-export XRAI_LOCAL_CONTEXT=32768
-
-# runtime
-export XRAI_WORKSPACE=.
-export XRAI_PORT=8787
-```
-
-The shell is **workspace-rooted, not an OS security sandbox**. A destructive-command blocklist catches obvious dangerous commands, but local execution still has the permissions of the user running XRAI. Use containers/VMs for untrusted tasks.
+It does **not** expose or imitate hidden chain-of-thought.
 
 ## Architecture
 
 ```text
-GitHub Pages chat ─ on-device model ─┐
-CLI ─ OpenAI or local Ollama ────────┤
-Browser Control Room ────────────────┼──> XRAI events / knowledge / eval loop
-                                     │
-ChatGPT / Claude ───── MCP ──────────┼──> shell(workspace)
-                                     ├──> knowledge(XRAI + lessons)
-                                     └──> bounded delegation
-                                               │
-                                           evaluator
-                                               │
-                                   retry OR verified lesson
+                        ┌──────────────────┐
+User / ChatGPT / Claude │    XRAI Core     │
+Local / browser model ─▶│  small + stable  │
+                        └────────┬─────────┘
+                                 │
+                    retrieve promoted skills
+                                 │
+                                 ▼
+                         Execute + Tools
+                                 │
+                                 ▼
+                            Evaluator
+                                 │
+                       candidate skill diff
+                                 │
+              ┌──────────────────┴─────────────────┐
+              │                                    │
+       safe verifier exists                 no verifier
+              │                                    │
+       execute real check                   repeat support
+          /         \                       across tasks
+       pass         fail                         │
+        │             │                          │
+     promote       reject                   promote later
+        │                                        │
+        └──────────────────┬─────────────────────┘
+                           ▼
+                    Promoted Skill Set
+                           │
+                   measured future use
+                           │
+                           ▼
+               slow meta loop + rollback
 ```
+
+## Why no agent framework or vector database
+
+At this scale, adding LangChain/LangGraph, Redis, a vector DB, a graph DB, a queue, or a separate swarm service would increase failure modes faster than capability.
+
+v0.2 keeps state inspectable:
+
+- Markdown for durable base knowledge
+- append-only JSONL for server skill history
+- localStorage for browser skill history
+- token-overlap retrieval plus measured utility/confidence
+
+Add embeddings or a database only when measured retrieval quality or scale justifies it.
+
+## Verification safety
+
+Automatic skill verifiers are deliberately restricted to recognizable project verification commands such as:
+
+```text
+npm test
+npm run check
+pytest
+go test
+cargo test
+dotnet test
+```
+
+This allowlist prevents arbitrary evaluator-generated shell from becoming a promotion gate. It is **not an OS sandbox**: project test/build scripts themselves can execute code with the permissions of the user running XRAI. Use a container or VM for untrusted repositories.
 
 ## Tests
 
 ```bash
-npm test
 npm run check
 ```
 
-The deterministic suite covers knowledge ranking, durable lessons, MCP initialization/tool discovery, bounded Ollama capability detection, the Chat + Control Room surfaces, and the static no-key Pages fallback. Network/model calls are not required for tests.
+The deterministic suite currently verifies:
 
-## Current v0.1 boundaries
+- knowledge ranking
+- MCP v0.2 tool surface
+- bounded Ollama detection
+- verifier-gated immediate skill promotion
+- two-distinct-task support promotion
+- verifier failure rejection
+- sensitive-memory rejection
+- verifier command allowlist
+- slow meta-learning after 10 runs
+- rollback to a prior proven skill version
+- static no-key browser inference
+- browser evaluator fail-closed behavior
+- Chat + Control Room surfaces
 
-- GitHub Pages/browser mode cannot run shell commands on the user's machine; it intentionally runs in a browser sandbox with local AI, XRAI knowledge, orchestration, evaluation, and local lessons.
-- CLI/MCP mode can use the local workspace shell.
-- ChatGPT needs a remote MCP connection (or Secure MCP Tunnel); a static GitHub Pages site cannot itself be an MCP HTTP server.
-- The evaluator is model-based; deterministic project tests remain the strongest verifier when available.
-- Browser visualization shows actions and outcomes, not private reasoning tokens.
+Network/model calls are not required for the test suite.
 
-These constraints are intentional: keep the kernel understandable first, then add complexity only when measurements justify it.
+## Current boundaries
 
-## Sources that informed v0.1
+- Browser Pages mode cannot run commands on the user's machine.
+- Browser skill promotion therefore requires repeated independent success rather than a shell verifier.
+- Model evaluation is still probabilistic; deterministic project verification remains stronger evidence.
+- The kernel does not autonomously rewrite itself. Skills/meta-guidance evolve; kernel changes remain test-gated and version-controlled.
+- The shell is workspace-rooted by convention and destructive-command blocking, not an OS security sandbox.
 
-- OpenAI Responses API, Apps/MCP guidance, and Secure MCP Tunnel model
-- Model Context Protocol transport guidance
-- Claude Code MCP
-- Chrome built-in Prompt API
-- Hugging Face Transformers.js + ONNX Community LFM2.5 350M browser model
-- Ollama native multi-turn tool calling
-- XRAI `knowledge/`: minimal loops, evidence-first evals, durable memory, less-is-more engineering
-- GenericAgent's skill-crystallization approach as a comparison point
+## Knowledge source
+
+The seed knowledge under `knowledge/` is synchronized from:
+
+```text
+https://github.com/JT5D/xrai/tree/main/knowledge
+```
+
+Refresh it with:
+
+```bash
+node src/cli.js sync
+```
 
 MIT licensed.
