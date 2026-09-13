@@ -38,16 +38,19 @@ jobs:
       - name: Real model preflight
         run: |
           npm install --no-save --ignore-scripts playwright@1.55.0
-          cp test/live-pages.e2e.mjs test/model-candidate.e2e.mjs
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('test/model-candidate.e2e.mjs');s=p.read_text()
-          needle="  await page.goto(`${base}?e2e=${flow}-${Date.now()}`,{waitUntil:'domcontentloaded',timeout:60_000});"
-          assert needle in s
-          inject="  report.candidateModuleOverride=true;\n  await page.route('**/local-agent.js*',route=>route.fulfill({contentType:'text/javascript',body:fsSync.readFileSync('web/local-agent.js','utf8')}));\n"
-          p.write_text(s.replace(needle,inject+needle))
+          p=Path('test/model-candidate.e2e.mjs');s=Path('test/live-pages.e2e.mjs').read_text()
+          s=s.replace("rawBase.replace(/^http:/,'https:')","rawBase")
+          s=s.replace("require(ready,'real local model emitted no model:ready event');","require(ready,'real local model emitted no model:ready event');require(/LFM/.test(ready.summary),'candidate must actually run LFM, not the old fallback');")
+          p.write_text(s)
+          Path('/tmp/xrai-preflight-server.py').write_text("from http.server import ThreadingHTTPServer,SimpleHTTPRequestHandler\nfrom functools import partial\nclass H(SimpleHTTPRequestHandler):\n def end_headers(self):\n  self.send_header('Cross-Origin-Opener-Policy','same-origin')\n  self.send_header('Cross-Origin-Embedder-Policy','require-corp')\n  super().end_headers()\nThreadingHTTPServer(('127.0.0.1',8765),partial(H,directory='web')).serve_forever()\n")
           PY
-          xvfb-run -a node test/model-candidate.e2e.mjs https://jt5d.github.io/xrai-agent/ model-runtime
+          python3 /tmp/xrai-preflight-server.py > /tmp/xrai-preflight-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" || true' EXIT
+          sleep 1
+          xvfb-run -a node test/model-candidate.e2e.mjs http://127.0.0.1:8765/ model-runtime
       - name: Record tested candidate
         if: success()
         run: |
