@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACTIVE_CHAT_KEY,CHAT_SWITCH_KEY,UI_STATE_KEY,branchLineage,branchTree,compareChats,finishChatTransition,forkChat,isChatTransitioning,listChats,newChat,restoreChat,snapshotChat } from '../web/conversation-store.js';
+import { ACTIVE_CHAT_KEY,CHAT_SWITCH_KEY,UI_STATE_KEY,branchLineage,branchTree,compareChats,finishChatTransition,forkChat,isChatTransitioning,listChats,newChat,restoreChat,snapshotChat,snapshotCurrentChat } from '../web/conversation-store.js';
 
 function storage(){const m=new Map();return{getItem:k=>m.has(k)?m.get(k):null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k),dump:()=>m}}
 const state=(text,result='',run='r',score=.8,attempts=1)=>({version:4,view:'chat',activeRunId:run,lastTask:text,runStatus:'completed',statusText:'done',messages:[{role:'user',text,runId:null},{role:'agent',text:result||`answer ${text}`,runId:run}],events:[{id:`e-${run}`,runId:run,type:'run:done',summary:`done ${text}`}],result:{runId:run,output:result||`answer ${text}`,score,attempts,provider:'browser',changedFiles:[],diff:''},options:{workspace:'.',maxDepth:2,maxChildren:2,retries:1}});
@@ -75,4 +75,8 @@ test('conversation snapshots reuse UI compaction for large payloads',()=>{
 
 test('oversized legacy chat storage is preserved and never synchronously parsed or overwritten',()=>{
   const s=storage(),raw='x'.repeat(3500001);s.setItem('xrai-chats-v1',raw);s.setItem(ACTIVE_CHAT_KEY,'legacy');assert.deepEqual(listChats(s),[]);assert.equal(snapshotChat(s,state('new'),'legacy'),null);assert.equal(s.getItem('xrai-chats-v1'),raw);
+});
+
+test('oversized active UI state is never parsed while snapshotting or leaving the page',()=>{
+  const s=storage(),raw='x'.repeat(1500001);s.setItem(UI_STATE_KEY,raw);s.setItem(ACTIVE_CHAT_KEY,'legacy');assert.equal(snapshotCurrentChat(s),null);assert.equal(s.getItem(UI_STATE_KEY),raw);
 });
