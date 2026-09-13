@@ -51,7 +51,7 @@ export function migrateLegacyUiState(storage=globalThis.localStorage){
 }
 
 function lastMeaningfulUserTask(state){
-  const lastTask=String(state?.lastTask||'').trim();
+  const lastTask=String(state?.lastTask||'').split('\n\nPrevious XRAI context',1)[0].trim();
   if(lastTask&&!isContextualFollowup(lastTask))return lastTask;
   const messages=Array.isArray(state?.messages)?state.messages:[];
   for(let i=messages.length-1;i>=0;i--){
@@ -76,12 +76,7 @@ export function contextualizeFollowup(task,storage=globalThis.localStorage){
   }catch{return clean}
 }
 
-if(typeof window!=='undefined'&&typeof document!=='undefined'){
+if(typeof window!=='undefined'){
   purgeStaleUiState(window.localStorage);
   migrateLegacyUiState(window.localStorage);
-  document.addEventListener('submit',event=>{
-    const form=event.target;if(!(form instanceof HTMLFormElement)||form.id!=='chatForm')return;
-    const input=form.querySelector('#task');if(!(input instanceof HTMLTextAreaElement))return;
-    input.value=contextualizeFollowup(input.value,window.localStorage);
-  },true);
 }
