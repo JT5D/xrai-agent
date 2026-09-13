@@ -4,6 +4,8 @@ import { analyzeOrchestration,parsePlannerDecision,shouldContinueImproving } fro
 const FULL_MODEL_ID='onnx-community/LFM2.5-350M-ONNX';
 const LITE_MODEL_ID='onnx-community/SmolLM2-135M-Instruct-ONNX-MHA';
 const CDN='https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.0.1';
+const CHROME_AVAILABILITY_TIMEOUT_MS=1500;
+const CHROME_CREATE_TIMEOUT_MS=8000;
 const KNOWLEDGE_FILES=['MISSION.md','KEY_LEARNINGS.md','SYSTEM_PATTERNS.md','AGENTIC_CODING_EVALS_2025_2026.md','UNVERIFIED.md'];
 const SKILLS_KEY='xrai-skills-v2',META_KEY='xrai-meta-v2',RUNS_KEY='xrai-runs-v2';
 const STOP=new Set('the a an and or to of in on for with is are be as at by from it this that use uses using'.split(' '));
@@ -16,12 +18,26 @@ const baseMeta=()=>({version:1,minScore:.82,directPromoteScore:.86,supportNeeded
 let modelPromise,knowledgePromise;
 
 function normalizeGenerated(out){const x=Array.isArray(out)?out[0]:out,g=x?.generated_text??x?.text??x;if(Array.isArray(g))return g.filter(m=>m?.role==='assistant').at(-1)?.content||g.at(-1)?.content||JSON.stringify(g);return String(g??'')}
+export async function checkChromeModelAvailability(languageModel,options={},timeoutMs=CHROME_AVAILABILITY_TIMEOUT_MS){
+  if(!languageModel?.availability)return{status:'unavailable',timedOut:false};
+  let timer;
+  try{
+    const status=await Promise.race([languageModel.availability(options),new Promise(resolve=>{timer=setTimeout(()=>resolve('__xrai_timeout__'),timeoutMs)})]);
+    return status==='__xrai_timeout__'?{status:'unavailable',timedOut:true}:{status:String(status||'unavailable'),timedOut:false};
+  }finally{clearTimeout(timer)}
+}
 async function chromeModel(onProgress){
-  if(!globalThis.LanguageModel?.availability)return null;
-  const options={expectedInputs:[{type:'text',languages:['en']}],expectedOutputs:[{type:'text',languages:['en']}]},availability=await globalThis.LanguageModel.availability(options);if(availability==='unavailable')return null;
-  onProgress?.(`Chrome local model: ${availability}`);
-  const base=await globalThis.LanguageModel.create({...options,monitor(m){m.addEventListener('downloadprogress',e=>onProgress?.(`Downloading local model ${Math.round(e.loaded*100)}%`))}});
-  return{name:'Chrome built-in AI',prompt:async messages=>{const session=typeof base.clone==='function'?await base.clone():await globalThis.LanguageModel.create(options);try{return await session.prompt(messages.map(m=>`${m.role.toUpperCase()}: ${m.content}`).join('\n\n')+'\n\nASSISTANT:')}finally{if(session!==base)session.destroy?.()}}}
+  const languageModel=globalThis.LanguageModel;if(!languageModel?.availability)return null;
+  const options={expectedInputs:[{type:'text',languages:['en']}],expectedOutputs:[{type:'text',languages:['en']}]};
+  onProgress?.('Checking Chrome built-in AI…');
+  const availability=await checkChromeModelAvailability(languageModel,options);
+  if(availability.timedOut){onProgress?.('Chrome built-in AI readiness timed out; using compact local fallback.');return null}
+  if(!['available','readily'].includes(availability.status)){onProgress?.(`Chrome local model: ${availability.status}; using compact local fallback.`);return null}
+  onProgress?.(`Chrome local model: ${availability.status}`);
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),CHROME_CREATE_TIMEOUT_MS);
+  let base;
+  try{base=await languageModel.create({...options,signal:controller.signal,monitor(m){m.addEventListener('downloadprogress',e=>onProgress?.(`Downloading local model ${Math.round(e.loaded*100)}%`))}})}finally{clearTimeout(timer)}
+  return{name:'Chrome built-in AI',prompt:async messages=>{const session=typeof base.clone==='function'?await base.clone():await languageModel.create(options);try{return await session.prompt(messages.map(m=>`${m.role.toUpperCase()}: ${m.content}`).join('\n\n')+'\n\nASSISTANT:')}finally{if(session!==base)session.destroy?.()}}}
 }
 export function selectBrowserModelProfile(nav={}){const constrained=isConstrainedDevice(nav),webgpu=Boolean(nav.gpu);return{constrained,modelId:constrained?LITE_MODEL_ID:FULL_MODEL_ID,device:webgpu?'webgpu':'wasm',dtype:webgpu?'q4f16':'q4',maxNewTokens:constrained?220:420,label:constrained?'SmolLM2 135M · mobile-safe':'LFM2.5 350M'}}
 async function transformersModel(onProgress){const profile=selectBrowserModelProfile(navigator);onProgress?.(`Loading ${profile.label} · ${profile.device.toUpperCase()}…`);const{pipeline}=await import(CDN),generator=await pipeline('text-generation',profile.modelId,{device:profile.device,dtype:profile.dtype,progress_callback:p=>{if(p?.progress!=null)onProgress?.(`Downloading local model ${Math.round(p.progress)}%`);else if(p?.status)onProgress?.(String(p.status))}});return{name:`${profile.label} · ${profile.device.toUpperCase()}`,prompt:async messages=>normalizeGenerated(await generator(messages,{max_new_tokens:profile.maxNewTokens,do_sample:false,repetition_penalty:1.05}))}}
