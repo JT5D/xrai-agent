@@ -36,7 +36,8 @@ test('exact bad capability prompt executes a grounded capability answer rather t
   const result=await runBuiltinTask('what are all agent capabilities? can it search the web? if not add this skill & ensure it is state of art & fast',{fetchFn:mockFetch,emit:e=>events.push(e)});
   assert.equal(result.provider,'browser-tools');
   assert.match(result.output,/web search is a real built-in runtime tool/i);
-  assert.doesNotMatch(result.output,/SerpAPI|Redis|requests|pytest/i);
+  assert.match(result.output,/does not require SerpAPI, Redis, Python/i);
+  assert.doesNotMatch(result.output,/api_selection_justification|Redis configuration|missing_elements|requests\b|pytest\b/i);
   assert.ok(events.some(e=>e.type==='tool:start'&&e.name==='web_search'));
   assert.ok(events.some(e=>e.type==='tool:done'&&e.name==='web_search'));
 });
