@@ -1,6 +1,8 @@
+import { isRuntimeStatusQuestion } from './runtime-status.js';
 import { visibleTask,isContextualFollowup,isRetryFollowup } from './input-guard.js';
 const FOLLOWUP=/\b(?:previous|these|those|this|that|our|chat history|recommendations?|plans?)\b/i;
 export function isContinuation(task=''){
+  if(isRuntimeStatusQuestion(task))return true;
   return /^(?:did|have|has|was|were|is|are|what|which)\b[\s\S]*\b(?:improvements?|plans?|changes?|executed|implemented|installed|verified|done|finished|working)\b/i.test(task.trim())||isContextualFollowup(task)||(/\b(?:do|execute|implement|apply|finish|continue|verify|fix|remember)\b/i.test(task)&&FOLLOWUP.test(task));
 }
 export function conversationContext(state={},task=''){

@@ -139,7 +139,7 @@ function renderTimeline(){
 
 function setRunStatus(status,text=status){
   ui.runStatus=status;ui.statusText=text;$('#status').textContent=text;$('#runButton').disabled=status==='running';$('#rerun').disabled=!ui.lastTask||status==='running';
-  $('#statusHealth').textContent=status==='running'?'Running':status==='error'?'Needs attention':'Healthy';
+  $('#statusHealth').textContent=status==='running'?'Running':['error','incomplete','interrupted'].includes(status)?'Needs attention':'Healthy';
   persist();
 }
 function updatePatchButton(){
@@ -223,7 +223,7 @@ async function runBrowser(task,context,live){
   const progress=message=>{if(live()){$('#status').textContent=message;ui.statusText=message;persist()}};
   const inherited=isRetryFollowup(task)?context.lastTask||context.goal||task:task;
   const builtinKind=classifyBuiltinTask(inherited);
-  const execute=executionIntent(task,context)&&!['capabilities','capabilities+web','self-improvement-proof'].includes(builtinKind);
+  const execute=executionIntent(task,context)&&!['capabilities','capabilities+web','self-improvement-proof','runtime-status'].includes(builtinKind);
   let research=null;
   if(builtinKind){
     research=await runBuiltinTask(inherited,{emit,progress,query:contextualResearchQuery(inherited,context)});
@@ -267,7 +267,7 @@ function renderAll(){
   $('#status').textContent=ui.statusText||'ready';
   $('#rerun').disabled=!ui.lastTask||ui.runStatus==='running';
   $('#runButton').disabled=ui.runStatus==='running';
-  $('#statusHealth').textContent=ui.runStatus==='error'?'Needs attention':ui.runStatus==='running'?'Running':'Healthy';
+  $('#statusHealth').textContent=['error','incomplete','interrupted'].includes(ui.runStatus)?'Needs attention':ui.runStatus==='running'?'Running':'Healthy';
   if(ui.activeRunId)$('#runMeta').textContent=`run ${ui.activeRunId.slice(0,8)}`;
   if(ui.runStatus==='running'&&!activeSubmission){ui.runStatus='interrupted';ui.statusText='recovered after refresh';$('#runButton').disabled=false;$('#rerun').disabled=!ui.lastTask;persist();showResume('The page refreshed while a run was active. Your task and visible progress were preserved.')}
 }
