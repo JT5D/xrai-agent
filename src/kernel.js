@@ -41,14 +41,14 @@ export async function runTask(task,opts={}){
   const policy=analyzeOrchestration(task,{maxDepth:requestedDepth,maxChildren:requestedChildren,maxRetries:requestedRetries}),maxDepth=policy.depth,maxChildren=policy.children,retries=policy.retries;
   const promotedSkills=await retrieveSkills(root,task,4),meta=await getMetaPolicy(root),skillContext=formatSkills(promotedSkills),metaGuidance=(meta.guidance||[]).join(' ');
   bus.emitEvent(runId,'run:start',task,{data:{workspace:root,model,maxDepth,maxChildren,retries,skills:promotedSkills.map(s=>`${s.id}@v${s.version}`),policy}});
-  bus.emitEvent(runId,'orchestration:policy',`${policy.mode} · depth ${policy.depth} · children ${policy.children} · retries ${policy.retries} · max turns ${policy.maxTurns}`,{name:'Adaptive orchestration',data:policy});
+  bus.emitEvent(runId,'orchestration:policy',`model-led · caps depth ${policy.depth} · children ${policy.children} · retries ${policy.retries} · turns ${policy.maxTurns}`,{name:'Model-led orchestration',data:policy});
   for(const s of promotedSkills)bus.emitEvent(runId,'skill:hit',`${s.title} · ${Math.round(s.score*100)}%`,{name:'Promoted skill',data:{id:s.id,version:s.version,score:s.score,confidence:s.confidence}});
   let attempts=0,finalOutput='',score=0,finalEval=null,previousScore=null;
   async function runAgent(agentTask,depth=0,parentAgentId){
     const agentId=crypto.randomUUID();let children=0;bus.emitEvent(runId,'agent:start',agentTask,{agentId,parentAgentId,name:depth?'Child agent':'Root agent'});
     let previous_response_id,input=agentTask;
     for(let turn=0;turn<policy.maxTurns;turn++){
-      const r=await response({model,reasoning:{effort:process.env.XRAI_REASONING||policy.reasoning||EFFORT()},instructions:`You are XRAI Agent, a compact execution agent. Complete the task end-to-end. Prefer evidence, inspect before editing, make minimal changes, test/verify, and report concrete results. Never fabricate tool results. Use delegation only when work is genuinely separable and the expected information gain exceeds its latency. Workspace root: ${root}. The shell is workspace-rooted but not an OS sandbox, so do not access unrelated files.\n\nPROMOTED SKILLS (reuse only when relevant; evidence outranks memory):\n${skillContext}\n\nMETA-SKILL GUIDANCE:\n${metaGuidance}`,input,previous_response_id,tools,parallel_tool_calls:false,store:true});
+      const r=await response({model,reasoning:{effort:process.env.XRAI_REASONING||policy.reasoning||EFFORT()},instructions:`You are XRAI Agent, a compact execution agent. Complete the task end-to-end. You own planning, decomposition, tool choice, and whether delegation is useful. Prefer evidence, inspect before editing, make minimal changes, test/verify, and report concrete results. Never fabricate tool results. Delegate only when you judge the work genuinely separable and worth the added latency; the runtime caps are safety ceilings, not a prescribed workflow. Workspace root: ${root}. The shell is workspace-rooted but not an OS sandbox, so do not access unrelated files.\n\nPROMOTED SKILLS (reuse only when relevant; evidence outranks memory):\n${skillContext}\n\nMETA-SKILL GUIDANCE:\n${metaGuidance}`,input,previous_response_id,tools,parallel_tool_calls:false,store:true});
       previous_response_id=r.id;const calls=(r.output||[]).filter(x=>x.type==='function_call');
       if(!calls.length){const out=outputText(r)||'Completed without a text response.';bus.emitEvent(runId,'agent:done',out.slice(0,900),{agentId,parentAgentId});return out}
       const outputs=[];
@@ -63,7 +63,7 @@ export async function runTask(task,opts={}){
       }
       input=outputs;
     }
-    throw new Error(`Agent exceeded adaptive ${policy.maxTurns}-turn budget.`);
+    throw new Error(`Agent exceeded model-led ${policy.maxTurns}-turn safety ceiling.`);
   }
   async function evaluate(candidate,trace){
     const skillSchema={type:'object',properties:{title:{type:'string'},trigger:{type:'string'},procedure:{type:'string'},verifier:{type:'string'},tags:{type:'array',items:{type:'string'},maxItems:8}},required:['title','trigger','procedure','verifier','tags'],additionalProperties:false};
