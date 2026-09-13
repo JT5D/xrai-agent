@@ -46,7 +46,7 @@ function queueRetry(task){
 }
 
 function installPendingRetry(){
-  window.addEventListener('DOMContentLoaded',()=>{
+  const start=()=>{
     if(sessionStorage.getItem(RETRY_PENDING_KEY)!=='1')return;
     const deadline=performance.now()+5000;
     const tryStart=()=>{
@@ -57,7 +57,9 @@ function installPendingRetry(){
       const state=currentState();state.runStatus='error';state.statusText='retry could not start after app initialization';writeState(state);
     };
     tryStart();
-  });
+  };
+  if(document.readyState==='loading')window.addEventListener('DOMContentLoaded',start,{once:true});
+  else start();
 }
 
 function installBuiltinRouter(){
