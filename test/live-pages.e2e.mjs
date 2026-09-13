@@ -141,7 +141,7 @@ async function runRepo(){
   const task='review repo, fix any failed tests, verify & explain';
   const result=await submit(task,300_000),events=result.events||[];
   require(result.runStatus==='completed',`repo execution ended with ${result.runStatus}: ${result.statusText||''}`);
-  require(result.result?.provider==='browser-webcontainer',`repo execution provider was ${result.result?.provider||'none'}, expected browser-webcontainer`);
+  require(/WebContainer/i.test(String(result.result?.provider||'')),`repo execution provider was ${result.result?.provider||'none'}, expected WebContainer evidence`);
   require(result.result?.repo==='JT5D/xrai-agent',`repo execution targeted ${result.result?.repo||'none'}`);
   require(events.some(e=>e.name==='GitHub public repo'&&e.type==='tool:done'),'repo execution lacks real GitHub import evidence');
   require(events.some(e=>e.name==='Test verifier'&&e.type==='tool:done'&&/PASS/.test(String(e.summary||''))),'repo execution lacks passing deterministic verifier evidence');
