@@ -7,64 +7,55 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: 64df434005e07e16023fb5a8091ebd06d86b0df4
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Apply exact reviewed repair
+      - name: Apply bounded upgrade and routing repair
         run: |
           python3 - <<'PY'
-          import json,hashlib,gzip,base64
           from pathlib import Path
-          payload=json.loads(Path('.repair.json').read_text())
-          if isinstance(payload,dict):
-              raw=gzip.decompress(base64.b64decode(payload['gzip']))
-              assert hashlib.sha256(raw).hexdigest()==payload['sha256']
-              payload=json.loads(raw)
-          for entry in payload:
-              p=Path(entry['path'])
-              assert not p.is_absolute() and '..' not in p.parts
-              if 'text' in entry:
-                  p.parent.mkdir(parents=True,exist_ok=True)
-                  p.write_text(entry['text'])
-              else:
-                  assert hashlib.sha256(p.read_bytes()).hexdigest()==entry['sha'],str(p)
-                  lines=p.read_text().splitlines(True)
-                  for start,end,text in reversed(entry['hunks']):
-                      assert 0 <= start <= end <= len(lines), str(p)
-                      lines[start:end]=[text]
-                  p.write_text(''.join(lines))
-          p=Path('package.json');data=json.loads(p.read_text());data['version']='0.3.48';p.write_text(json.dumps(data,indent=2)+'\n')
-          p=Path('README.md');p.write_text(p.read_text().replace('v0.3.47','v0.3.48').replace('The evaluator remains internal evidence for learning; it is not the product response.','The evaluator supplies internal estimates, not execution proof. Browser suggestions remain candidates until a real verifier receipt exists. Sandbox patches are not committed or deployed.'))
+          p=Path('web/app.js');s=p.read_text()
+          edits={
+            "try{if(sessionStorage.getItem(CHAT_SWITCH_KEY))sessionStorage.removeItem(CHAT_SWITCH_KEY)}catch{}":"try{sessionStorage.removeItem(CHAT_SWITCH_KEY);sessionStorage.removeItem(RETRY_PENDING_KEY)}catch{}",
+            "sessionStorage.getItem(CHAT_SWITCH_KEY)||sessionStorage.getItem(RETRY_PENDING_KEY)":"sessionStorage.getItem(CHAT_SWITCH_KEY)",
+            "const inherited=isContinuation(task)&&context.goal?context.goal:task;":"const inherited=isRetryFollowup(task)&&context.goal?context.goal:task;"
+          }
+          for a,b in edits.items():
+              assert s.count(a)==1,a
+              s=s.replace(a,b)
+          p.write_text(s)
+          p=Path('test/conversation.e2e.mjs');s=p.read_text()
+          s=s.replace('globalThis.testPrompts=[];',"sessionStorage.setItem('xrai-retry-pending-v1','legacy-run');globalThis.testPrompts=[];")
+          s=s.replace("await send('did self improvements happen?');","s=await send('did self improvements happen?');assert.match(s.result.output,/0 verified/i,'status question must report evidence, not rerun research');assert.equal(await page.evaluate(()=>sessionStorage.getItem('xrai-retry-pending-v1')),null);")
+          p.write_text(s)
+          Path('test/ui-route-upgrade.test.js').write_text("import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport fs from 'node:fs';\nconst app=fs.readFileSync(new URL('../web/app.js',import.meta.url),'utf8');\ntest('only literal retries inherit prior routing, not status questions',()=>{assert.ok(app.includes('const inherited=isRetryFollowup(task)'));assert.ok(!app.includes('const inherited=isContinuation(task)'))});\ntest('legacy retry state is cleared and cannot block persistence',()=>{assert.ok(app.includes('sessionStorage.removeItem(RETRY_PENDING_KEY)'));assert.ok(!app.includes('||sessionStorage.getItem(RETRY_PENDING_KEY)'))});\n")
           PY
       - name: Source checks
         run: npm run check > source-checks.txt 2>&1
-      - name: Browser contract checks
-        if: success()
+      - name: Rendered conversation and upgrade regression checks
         run: |
           npm install --no-save --ignore-scripts playwright@1.55.0
           node test/conversation.e2e.mjs
-      - name: Export source and evidence
+      - name: Export exact source and evidence
         if: always()
         run: |
           mkdir -p artifacts
           cp source-checks.txt artifacts/ || true
           tar --exclude=node_modules --exclude=.git --exclude=artifacts -czf artifacts/source.tar.gz README.md package.json src web test knowledge .github
-      - name: Create tested commit without repair infrastructure
-        if: success()
+      - name: Publish tested candidate branch only
         run: |
           git config user.name JT5D
           git config user.email jtunick@theimclab.com
-          git rm --ignore-unmatch .repair.json .github/workflows/repair-validation.yml
-          git add README.md web test package.json .github/workflows/pages.yml
-          tree=$(git write-tree)
-          commit=$(printf '%s\n' 'Fix conversation context, serialized execution, research relevance and evidence integrity' | git commit-tree "$tree" -p 69c3440e4368820147de9ee8c53de6f92cc1fc08)
-          git push origin "$commit:refs/heads/repair/verified-context-tested-20260913"
-          printf '%s\n' "$commit" > artifacts/tested-commit.txt
+          git add web/app.js test/conversation.e2e.mjs test/ui-route-upgrade.test.js
+          git commit -m 'Fix legacy retry persistence and preserve literal status-question routing'
+          git rev-parse HEAD > artifacts/tested-commit.txt
+          git push origin HEAD:refs/heads/repair/final-upgrade-20260913
       - uses: actions/upload-artifact@v4
         if: always()
         with:
