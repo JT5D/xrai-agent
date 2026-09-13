@@ -9,7 +9,8 @@ class MemoryStorage{
   removeItem(k){this.map.delete(k)}
 }
 
-test('repo and test tasks require an execution host while ordinary chat does not',()=>{
+test('repo and test tasks route to execution while ordinary chat does not',()=>{
+  assert.equal(taskNeedsExecutionHost('review repo, fix any failed tests, verify & explain'),true);
   assert.equal(taskNeedsExecutionHost('Inspect this repo, fix failing tests, verify, and explain'),true);
   assert.equal(taskNeedsExecutionHost('Run npm test and patch the code'),true);
   assert.equal(taskNeedsExecutionHost('Explain evidence-gated skill learning simply'),false);
