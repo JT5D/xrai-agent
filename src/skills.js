@@ -10,16 +10,19 @@ const DEFAULT_META={
   directPromoteScore:.86,
   supportNeeded:2,
   maintenanceEvery:10,
+  minVersionGain:.01,
   retrieval:{relevance:.65,confidence:.15,utility:.15,recency:.05},
   guidance:[
     'Create narrow reusable skills, not task transcripts.',
     'Prefer a concrete safe verifier that directly tests the claimed outcome.',
-    'Treat retrieved skills as hypotheses; evidence outranks memory.'
+    'Treat retrieved skills as hypotheses; evidence outranks memory.',
+    'A replacement skill should measurably outperform the version it supersedes.'
   ]
 };
 
 const tokens=s=>[...new Set((String(s).toLowerCase().match(/[a-z0-9_+-]{2,}/g)||[]).filter(x=>!STOP.has(x)))];
 const clamp=n=>Math.max(0,Math.min(1,Number(n)||0));
+const mean=xs=>Array.isArray(xs)&&xs.length?xs.reduce((a,b)=>a+clamp(b),0)/xs.length:null;
 const now=()=>new Date().toISOString();
 const hash=s=>createHash('sha256').update(String(s)).digest('hex').slice(0,16);
 const taskFingerprint=task=>hash(tokens(task).sort().join(' '));
@@ -40,7 +43,7 @@ function reduce(rows){
     if(e.type==='meta:update')Object.assign(meta,e.meta||{}, {guidance:[...(e.meta?.guidance||meta.guidance)],retrieval:{...meta.retrieval,...(e.meta?.retrieval||{})}});
     if(e.type==='run:outcome'){runCount++;continue}
     if(!e.id||!e.version)continue;const key=versionKey(e.id,e.version);let s=versions.get(key);
-    if(e.type==='skill:proposed'){s={...e.skill,id:e.id,version:e.version,status:'candidate',createdAt:e.ts,updatedAt:e.ts,supports:new Set([e.taskFingerprint].filter(Boolean)),scores:[clamp(e.score)],uses:0,successes:0,failures:0,lastUsedAt:null,verification:null};versions.set(key,s);continue}
+    if(e.type==='skill:proposed'){s={...e.skill,id:e.id,version:e.version,status:'candidate',createdAt:e.ts,updatedAt:e.ts,supports:new Set([e.taskFingerprint].filter(Boolean)),scores:[clamp(e.score)],usageScores:[],uses:0,successes:0,failures:0,lastUsedAt:null,verification:null};versions.set(key,s);continue}
     if(!s)continue;s.updatedAt=e.ts||s.updatedAt;
     if(e.type==='skill:supported'){if(e.taskFingerprint)s.supports.add(e.taskFingerprint);if(Number.isFinite(Number(e.score)))s.scores.push(clamp(e.score))}
     else if(e.type==='skill:verified')s.verification={ok:true,command:e.command,summary:e.summary||'Verifier passed',ts:e.ts};
@@ -50,7 +53,7 @@ function reduce(rows){
     else if(e.type==='skill:rejected')s.status='rejected';
     else if(e.type==='skill:retired')s.status='retired';
     else if(e.type==='skill:rollback')s.status=e.restore?'promoted':'rolled_back';
-    else if(e.type==='skill:used'){s.uses++;if(e.success)s.successes++;else s.failures++;s.lastUsedAt=e.ts}
+    else if(e.type==='skill:used'){s.uses++;if(e.success)s.successes++;else s.failures++;if(Number.isFinite(Number(e.score)))s.usageScores.push(clamp(e.score));s.lastUsedAt=e.ts}
   }
   return {rows,versions,meta,runCount};
 }
@@ -82,6 +85,7 @@ function allSkills(store){return [...store.versions.values()]}
 function activeSkills(store){return allSkills(store).filter(s=>s.status==='promoted')}
 function currentForId(store,id){return allSkills(store).filter(s=>s.id===id).sort((a,b)=>b.version-a.version)[0]}
 function priorPromoted(store,id,version){return allSkills(store).filter(s=>s.id===id&&s.version<version&&['promoted','superseded'].includes(s.status)).sort((a,b)=>b.version-a.version)[0]}
+function skillQuality(skill){if(!skill)return null;const usage=mean(skill.usageScores);if(usage!==null)return usage;return mean(skill.scores)}
 function similar(store,candidate){return allSkills(store).map(s=>({s,sim:jaccard(`${s.title} ${s.trigger} ${(s.tags||[]).join(' ')}`,`${candidate.title} ${candidate.trigger} ${(candidate.tags||[]).join(' ')}`),proc:jaccard(s.procedure,candidate.procedure)})).sort((a,b)=>b.sim-a.sim)[0]}
 
 export async function retrieveSkills(root,query,limit=4){
@@ -106,15 +110,16 @@ export async function observeSkillCandidate(root,candidateInput,{task,score,veri
     try{const out=await verify(candidate.verifier);verified=true;verificationSummary=String(out||'Verifier passed').slice(-1000);await append(root,{type:'skill:verified',id,version,command:candidate.verifier,summary:verificationSummary});}
     catch(e){verificationSummary=e instanceof Error?e.message:String(e);await append(root,{type:'skill:verification_failed',id,version,command:candidate.verifier,summary:verificationSummary});await append(root,{type:'skill:rejected',id,version,reason:'Concrete verifier failed.'});return{status:'rejected',id,version,skill:state,reason:'Concrete verifier failed.',verification:verificationSummary}}
   }
-  store=await loadSkillStore(root);state=store.versions.get(versionKey(id,version));const supportCount=state?.supports?.size||0,avg=(state?.scores||[]).reduce((a,b)=>a+b,0)/Math.max(1,state?.scores?.length||0);
-  const promote=verified||(supportCount>=meta.supportNeeded&&avg>=meta.directPromoteScore);
-  if(promote){const previous=priorPromoted(store,id,version);if(previous?.status==='promoted')await append(root,{type:'skill:superseded',id,version:previous.version,byVersion:version});const confidence=verified?Math.min(.98,.78+clamp(score)*.18):Math.min(.9,.62+avg*.22+Math.min(.08,supportCount*.02));await append(root,{type:'skill:promoted',id,version,confidence,reason:verified?'safe verifier passed':`${supportCount} distinct successful task observations`});return{status:'promoted',id,version,skill:state,confidence,verified,supportCount,reason:verified?'Concrete verifier passed.':'Repeated successful observations passed the support gate.'}}
-  return{status:'candidate',id,version,skill:state,supportCount,reason:candidate.verifier&&!isSafeVerifier(candidate.verifier)?'Verifier was not safe to execute automatically; awaiting repeated successful support.':'Awaiting another distinct successful observation or a safe concrete verifier.'};
+  store=await loadSkillStore(root);state=store.versions.get(versionKey(id,version));const supportCount=state?.supports?.size||0,avg=mean(state?.scores)||0,previous=priorPromoted(store,id,version),baseline=skillQuality(previous),requiredGain=Number(meta.minVersionGain??.01),beatsPrevious=baseline===null||avg>=baseline+requiredGain;
+  const evidenceGate=verified||(supportCount>=meta.supportNeeded&&avg>=meta.directPromoteScore),promote=evidenceGate&&beatsPrevious;
+  if(promote){if(previous?.status==='promoted')await append(root,{type:'skill:superseded',id,version:previous.version,byVersion:version});const confidence=verified?Math.min(.98,.78+clamp(score)*.18):Math.min(.9,.62+avg*.22+Math.min(.08,supportCount*.02));const reason=previous?`Challenger beat v${previous.version} baseline ${Math.round(baseline*100)}% with ${Math.round(avg*100)}% and passed ${verified?'its verifier':'the support gate'}.`:verified?'Concrete verifier passed.':'Repeated successful observations passed the support gate.';await append(root,{type:'skill:promoted',id,version,confidence,reason,baseline,candidateScore:avg});return{status:'promoted',id,version,skill:state,confidence,verified,supportCount,baseline,candidateScore:avg,reason}}
+  if(evidenceGate&&!beatsPrevious)return{status:'candidate',id,version,skill:state,verified,supportCount,baseline,candidateScore:avg,reason:`Challenger passed its evidence gate but did not yet beat v${previous.version} by ${Math.round(requiredGain*100)} point; baseline ${Math.round(baseline*100)}%, challenger ${Math.round(avg*100)}%.`};
+  return{status:'candidate',id,version,skill:state,supportCount,baseline,candidateScore:avg,reason:candidate.verifier&&!isSafeVerifier(candidate.verifier)?'Verifier was not safe to execute automatically; awaiting repeated successful support.':'Awaiting another distinct successful observation or a safe concrete verifier.'};
 }
 
 export async function recordSkillUsage(root,skills,score){const success=clamp(score)>=.82;for(const s of skills||[])await append(root,{type:'skill:used',id:s.id,version:s.version,success,score:clamp(score)});}
 
-export async function recordRunOutcome(root,{task,score,skills=[],candidateDecision}={}){await append(root,{type:'run:outcome',taskFingerprint:taskFingerprint(task),score:clamp(score),skillRefs:(skills||[]).map(s=>`${s.id}@${s.version}`),candidateDecision:candidateDecision?.status||'none'});return maybeMetaMaintenance(root)}
+export async function recordRunOutcome(root,{task,score,skills=[],candidateDecision}={}){await append(root,{type:'run:outcome',taskFingerprint:taskFingerprint(task),score:clamp(score),skillRefs:(skills||[]).map(s=>`${s.id}@v${s.version}`),candidateDecision:candidateDecision?.status||'none'});return maybeMetaMaintenance(root)}
 
 export async function maybeMetaMaintenance(root){
   let store=await loadSkillStore(root),meta=store.meta,every=Number(meta.maintenanceEvery||10);if(store.runCount-meta.lastRunCount<every)return null;
@@ -122,8 +127,8 @@ export async function maybeMetaMaintenance(root){
   const guidance=[...DEFAULT_META.guidance];if(candidateRate>.5)guidance.push('Too many candidates lack decisive evidence: narrow the trigger and propose a direct test/lint/build verifier when possible.');if(skillFailureRate>.25)guidance.push('Recent retrieved skills correlated with failures: use fewer, higher-confidence skills and explicitly re-check assumptions.');if(promotionRate>.6&&avgScore>.9)guidance.push('Recent promoted skills transfer well: reuse proven procedures before inventing new ones.');
   const next={...meta,version:Number(meta.version||1)+1,lastRunCount:store.runCount,guidance,metrics:{window:every,avgScore,promotionRate,candidateRate,skillFailureRate}};await append(root,{type:'meta:update',meta:next});
   store=await loadSkillStore(root);const actions=[];
-  for(const s of activeSkills(store)){if(s.uses<5)continue;const successRate=s.successes/Math.max(1,s.uses);if(successRate>=.4)continue;const prior=priorPromoted(store,s.id,s.version);await append(root,{type:'skill:rollback',id:s.id,version:s.version,restore:false,reason:`usage success rate ${successRate.toFixed(2)}`});actions.push(`rolled back ${s.id}@v${s.version}`);if(prior){await append(root,{type:'skill:rollback',id:prior.id,version:prior.version,restore:true,reason:`restored after v${s.version} underperformed`});actions.push(`restored ${prior.id}@v${prior.version}`)}}
+  for(const s of activeSkills(store)){if(s.uses<3)continue;const successRate=s.successes/Math.max(1,s.uses),usageAvg=mean(s.usageScores),prior=priorPromoted(store,s.id,s.version),priorQuality=skillQuality(prior),materiallyWorse=prior&&usageAvg!==null&&priorQuality!==null&&usageAvg+.03<priorQuality,consistentlyFailing=s.uses>=5&&successRate<.4;if(!materiallyWorse&&!consistentlyFailing)continue;const reason=materiallyWorse?`usage score ${usageAvg.toFixed(2)} trails prior ${priorQuality.toFixed(2)}`:`usage success rate ${successRate.toFixed(2)}`;await append(root,{type:'skill:rollback',id:s.id,version:s.version,restore:false,reason});actions.push(`rolled back ${s.id}@v${s.version}`);if(prior){await append(root,{type:'skill:rollback',id:prior.id,version:prior.version,restore:true,reason:`restored after v${s.version} underperformed`});actions.push(`restored ${prior.id}@v${prior.version}`)}}
   return{meta:next,actions};
 }
 
-export async function skillStats(root){const store=await loadSkillStore(root),skills=allSkills(store);return{runCount:store.runCount,meta:store.meta,promoted:skills.filter(s=>s.status==='promoted').length,candidates:skills.filter(s=>s.status==='candidate').length,rejected:skills.filter(s=>s.status==='rejected').length,retired:skills.filter(s=>['retired','rolled_back'].includes(s.status)).length,skills:activeSkills(store).map(s=>({id:s.id,version:s.version,title:s.title,uses:s.uses,successes:s.successes,confidence:s.confidence}))}}
+export async function skillStats(root){const store=await loadSkillStore(root),skills=allSkills(store);return{runCount:store.runCount,meta:store.meta,promoted:skills.filter(s=>s.status==='promoted').length,candidates:skills.filter(s=>s.status==='candidate').length,rejected:skills.filter(s=>s.status==='rejected').length,retired:skills.filter(s=>['retired','rolled_back'].includes(s.status)).length,skills:activeSkills(store).map(s=>({id:s.id,version:s.version,title:s.title,uses:s.uses,successes:s.successes,confidence:s.confidence,avgUsageScore:mean(s.usageScores)}))}}
