@@ -83,6 +83,19 @@ export function compareChats(storage=globalThis.localStorage,leftId,rightId){
   const a=metric(left),b=metric(right);
   return {left:a,right:b,scoreDelta:a.score!=null&&b.score!=null?a.score-b.score:null,attemptDelta:a.attempts!=null&&b.attempts!=null?a.attempts-b.attempts:null,eventDelta:a.events-b.events};
 }
+export function branchTree(rows=[]){
+  const clean=(Array.isArray(rows)?rows:[]).filter(x=>x?.id&&x?.state),byId=new Map(clean.map(x=>[x.id,x])),children=new Map();
+  for(const row of clean){const parent=byId.has(row.parentId)?row.parentId:null;if(!children.has(parent))children.set(parent,[]);children.get(parent).push(row)}
+  const order=(a,b)=>(a.forkedAt||a.createdAt||0)-(b.forkedAt||b.createdAt||0)||String(a.id).localeCompare(String(b.id));for(const group of children.values())group.sort(order);
+  const out=[],walk=(row,depth=0)=>{out.push({...metric(row),parentId:row.parentId||null,rootId:row.rootId||row.id,forkedAt:row.forkedAt||null,createdAt:row.createdAt||0,updatedAt:row.updatedAt||0,depth});for(const child of children.get(row.id)||[])walk(child,depth+1)};
+  for(const root of children.get(null)||[])walk(root,0);return out;
+}
+export function branchLineage(rows=[],chatId){
+  const tree=branchTree(rows),byId=new Map(tree.map(x=>[x.id,x])),selected=byId.get(chatId);if(!selected)return{ancestors:[],descendants:[]};
+  const ancestors=[];let parent=selected.parentId,guard=0;while(parent&&guard++<MAX_CHATS){ancestors.push(parent);parent=byId.get(parent)?.parentId||null}
+  const descendants=[];let changed=true,seen=new Set([chatId]);while(changed){changed=false;for(const row of tree)if(row.parentId&&seen.has(row.parentId)&&!seen.has(row.id)){seen.add(row.id);descendants.push(row.id);changed=true}}
+  return{ancestors,descendants};
+}
 export function deleteChat(storage=globalThis.localStorage,chatId){
   const rows=listChats(storage).filter(x=>x.id!==chatId);writeChats(storage,rows);
   if(storage?.getItem(ACTIVE_CHAT_KEY)===chatId){try{storage.removeItem(ACTIVE_CHAT_KEY)}catch{}}
