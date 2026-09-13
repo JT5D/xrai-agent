@@ -1,7 +1,7 @@
 name: Validate conversation repair
 on:
   push:
-    branches: [repair/conversation-0348]
+    branches: [repair/verified-context-20260913]
 permissions:
   contents: write
 jobs:
@@ -17,8 +17,7 @@ jobs:
           node-version: 20
       - name: Apply exact reviewed repair
         run: |
-          if [ -f .repair.json ]; then
-            python3 - <<'PY'
+          python3 - <<'PY'
           import json,hashlib,gzip,base64
           from pathlib import Path
           payload=json.loads(Path('.repair.json').read_text())
@@ -34,23 +33,21 @@ jobs:
                   p.write_text(entry['text'])
               else:
                   assert hashlib.sha256(p.read_bytes()).hexdigest()==entry['sha'],str(p)
-                  chars=list(p.read_text())
+                  lines=p.read_text().splitlines(True)
                   for start,end,text in reversed(entry['hunks']):
-                      chars[start:end]=list(text)
-                  p.write_text(''.join(chars))
+                      assert 0 <= start <= end <= len(lines), str(p)
+                      lines[start:end]=[text]
+                  p.write_text(''.join(lines))
           p=Path('package.json');data=json.loads(p.read_text());data['version']='0.3.48';p.write_text(json.dumps(data,indent=2)+'\n')
           p=Path('README.md');p.write_text(p.read_text().replace('v0.3.47','v0.3.48').replace('The evaluator remains internal evidence for learning; it is not the product response.','The evaluator supplies internal estimates, not execution proof. Browser suggestions remain candidates until a real verifier receipt exists. Sandbox patches are not committed or deployed.'))
           PY
-          fi
       - name: Source checks
         run: npm run check > source-checks.txt 2>&1
       - name: Browser contract checks
-        if: always()
+        if: success()
         run: |
-          if [ -f test/conversation.e2e.mjs ]; then
-            npm install --no-save --ignore-scripts playwright@1.55.0
-            node test/conversation.e2e.mjs
-          fi
+          npm install --no-save --ignore-scripts playwright@1.55.0
+          node test/conversation.e2e.mjs
       - name: Export source and evidence
         if: always()
         run: |
@@ -60,16 +57,14 @@ jobs:
       - name: Create tested commit without repair infrastructure
         if: success()
         run: |
-          if [ -f .repair.json ]; then
-            git config user.name JT5D
-            git config user.email jtunick@theimclab.com
-            git rm --ignore-unmatch .repair.json .github/workflows/repair-validation.yml
-            git add web test package.json README.md .github/workflows/pages.yml
-            tree=$(git write-tree)
-            commit=$(printf '%s\n' 'Fix conversation context, serialized execution, research relevance and evidence integrity' | git commit-tree "$tree" -p 69c3440e4368820147de9ee8c53de6f92cc1fc08)
-            git push origin "$commit:refs/heads/repair/conversation-0348-tested"
-            printf '%s\n' "$commit" > artifacts/tested-commit.txt
-          fi
+          git config user.name JT5D
+          git config user.email jtunick@theimclab.com
+          git rm --ignore-unmatch .repair.json .github/workflows/repair-validation.yml
+          git add README.md web test package.json .github/workflows/pages.yml
+          tree=$(git write-tree)
+          commit=$(printf '%s\n' 'Fix conversation context, serialized execution, research relevance and evidence integrity' | git commit-tree "$tree" -p 69c3440e4368820147de9ee8c53de6f92cc1fc08)
+          git push origin "$commit:refs/heads/repair/verified-context-tested-20260913"
+          printf '%s\n' "$commit" > artifacts/tested-commit.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
