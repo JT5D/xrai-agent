@@ -3,7 +3,8 @@ const uid=()=>globalThis.crypto?.randomUUID?.()||`xrai-${Date.now().toString(36)
 function inferStatus(type=''){
   if(/(?:^|:)start$|delegate$/.test(type))return'running';
   if(/blocked|error|fail/i.test(type))return'error';
-  if(/(?:^|:)done$|eval$|hit$|update$/.test(type))return'completed';
+  if(type==='improvement:stop')return'stopped';
+  if(/(?:^|:)done$|eval$|hit$|update$|baseline$|accept$/.test(type))return'completed';
   if(/retry/i.test(type))return'retrying';
   return'event';
 }
@@ -13,6 +14,7 @@ function inferKind(type=''){
   if(type.startsWith('agent:'))return'agent';
   if(type.startsWith('knowledge:')||type==='skill:hit')return'retrieval';
   if(type==='eval'||type==='retry')return'verification';
+  if(type.startsWith('improvement:'))return'improvement';
   if(type.startsWith('skill:')||type==='meta:update')return'learning';
   if(type==='capability:blocked')return'capability';
   if(type.startsWith('run:'))return'run';
@@ -23,7 +25,7 @@ function inferKind(type=''){
 function safeEvidence(data={}){
   if(!data||typeof data!=='object')return{};
   const out={};
-  for(const key of ['exitCode','timedOut','repo','branch','sha','fileCount','changedFiles','attempts','score','provider','model','sources','url','command']){
+  for(const key of ['exitCode','timedOut','repo','branch','sha','fileCount','changedFiles','attempts','attempt','score','previousScore','baseline','candidateScore','pathScore','provider','model','sources','url','command']){
     if(data[key]!=null)out[key]=data[key];
   }
   return out;
