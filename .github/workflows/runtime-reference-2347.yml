@@ -1,19 +1,15 @@
-name: Pinned runtime reference
+name: Precision reference
 on:
   push:
-    branches: [repair/runtime-reference-2347]
+    branches: [repair/precision-reference-2354]
 permissions:
   contents: read
 jobs:
-  reference:
+  browser:
     runs-on: ubuntu-latest
     timeout-minutes: 6
-    strategy:
-      fail-fast: false
-      matrix:
-        profile: [cpu, gpu, precision]
     env:
-      PROFILE: ${{ matrix.profile }}
+      PROFILE: gpu
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,15 +18,55 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-save --ignore-scripts playwright@1.56.1
-      - name: Preserve exact source
+      - name: Test Qwen3 with 8-bit weights
         run: |
-          mkdir -p artifacts
-          git rev-parse HEAD > artifacts/commit.txt
-          git archive --format=tar.gz --output=artifacts/source.tar.gz HEAD
-      - run: node test/runtime-reference.mjs
+          sed -i "s/dtype:'q4'/dtype:'q8'/g" test/runtime-reference.mjs
+          node test/runtime-reference.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: reference-${{ matrix.profile }}
+          name: precision-browser-q8
           path: artifacts/
-          retention-days: 7
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          pip install -q torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install -q transformers==4.51.3
+      - name: Compare native full precision without application code
+        run: |
+          mkdir -p artifacts
+          timeout 200 python - <<'PY'
+          import torch,json,time
+          from transformers import AutoTokenizer,AutoModelForCausalLM
+          torch.set_num_threads(4)
+          report={'model':'Qwen/Qwen3-0.6B','dtype':'fp32','runtime':'transformers 4.51.3','mocked':[],'cases':[]}
+          def save():
+              with open('artifacts/native.json','w') as f: json.dump(report,f,indent=2)
+          save()
+          try:
+              tokenizer=AutoTokenizer.from_pretrained(report['model'])
+              model=AutoModelForCausalLM.from_pretrained(report['model'],torch_dtype=torch.float32).eval()
+              cases=[('math',[{'role':'user','content':'What is 2 + 2? Reply with only the number.'}]),('recall',[{'role':'user','content':'My project code is cobalt-47.'},{'role':'assistant','content':'Understood.'},{'role':'user','content':'What is my project code? Reply with only the code.'}]),('patch',[{'role':'system','content':'You fix JavaScript source using test failures. Return only JSON with summary and edits. Each edit has path, search (exact current source), replace (fixed source). Do not change tests.'},{'role':'user','content':'src/sum.js contains:\nexport function sum(a,b){return a-b;}\n\nTest: assert.equal(sum(7,5),12);\nResult: exit 1; expected 12, actual 2. Fix src/sum.js.'}])]
+              for name,messages in cases:
+                  formatted=tokenizer.apply_chat_template(messages,tokenize=False,add_generation_prompt=True,enable_thinking=False)
+                  inputs=tokenizer(formatted,return_tensors='pt',add_special_tokens=False)
+                  start=time.time()
+                  with torch.inference_mode(): out=model.generate(**inputs,max_new_tokens=256,do_sample=False)
+                  report['cases'].append({'name':name,'output':tokenizer.decode(out[0][inputs.input_ids.shape[-1]:],skip_special_tokens=True),'ms':int((time.time()-start)*1000),'template':formatted})
+                  save()
+          except Exception as e: report['error']=str(e);save();raise
+          print(json.dumps(report))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: precision-native-fp32
+          path: artifacts/
