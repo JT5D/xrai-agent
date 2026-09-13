@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { extractEval,selectBrowserModelProfile } from '../web/local-agent.js';
+import { formatVerifiedImprovementReport,requestedImprovementCount,shouldGuardImprovementClaim,verifiedImprovementsForRun } from '../web/improvement-guard.js';
 
 test('static Pages build has no-key local inference and evidence-gated skill learning',async()=>{
   const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
@@ -17,6 +18,17 @@ test('browser evaluator parse failure is fail-closed and cannot promote learning
 test('browser evaluator caps learning when execution path quality is poor',()=>{
   const ev=extractEval('{"score":0.95,"pathScore":0.4,"critique":"good answer","pathCritique":"weak evidence","skill":{"title":"","trigger":"","procedure":"","verifier":"","tags":[]}}');
   assert.equal(ev.score,.95);assert.equal(ev.pathScore,.4);assert.equal(ev.compositeScore,.55);
+});
+
+test('self-improvement claims are replaced by retained structured evidence',()=>{
+  assert.equal(requestedImprovementCount('prove self improvement is happening by making 3 improvements now'),3);
+  assert.equal(shouldGuardImprovementClaim('prove self improvement is happening by making 3 improvements now','3 Improvements Made: learned and optimized'),true);
+  const state={events:[
+    {id:'a',runId:'r',type:'improvement:accept',summary:'Retry improved verified score',data:{baseline:.82,candidate:.91,delta:.09}},
+    {id:'b',runId:'r',type:'skill:promoted',summary:'Promoted safer verifier',data:{id:'skill-x',version:2,baseline:.88,candidateScore:.94,verified:true}}
+  ]};
+  const rows=verifiedImprovementsForRun(state,'r');assert.equal(rows.length,2);const report=formatVerifiedImprovementReport(rows,3);assert.match(report,/2 verified retained improvements/);assert.match(report,/baseline 82%/);assert.match(report,/skill-x@v2/);
+  assert.match(formatVerifiedImprovementReport([],3),/0 verified improvements/);
 });
 
 test('browser chooses a smaller quantized model on mobile and a full model on capable desktop',()=>{
@@ -38,7 +50,12 @@ test('public browser version and cache-busted runtime assets stay synchronized',
   const pkg=JSON.parse(await fs.readFile(new URL('../package.json',import.meta.url),'utf8'));
   const version=String(pkg.version).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
   assert.match(html,new RegExp(`<dt>Version<\\/dt><dd>${version}<\\/dd>`));
-  for(const asset of ['coi-bootstrap.js','static-runtime.js','input-guard.js','browser-enhancements.js','event-inspector.js','app.js'])assert.match(html,new RegExp(`${asset.replace('.','\\.')}\\?v=${version}`));
+  for(const asset of ['coi-bootstrap.js','static-runtime.js','input-guard.js','browser-enhancements.js','event-inspector.js','improvement-guard.js','app.js'])assert.match(html,new RegExp(`${asset.replace('.','\\.')}\\?v=${version}`));
+});
+
+test('public graph ships hover, expand, inspector, fit, zoom, pan, and keyboard interaction',async()=>{
+  const inspector=await fs.readFile(new URL('../web/event-inspector.js',import.meta.url),'utf8');
+  assert.match(inspector,/graph-tooltip/);assert.match(inspector,/dblclick/);assert.match(inspector,/toggleExpanded/);assert.match(inspector,/fitGraph/);assert.match(inspector,/pointerdown/);assert.match(inspector,/data-event-id|eventId/);assert.match(inspector,/aria-label/);assert.match(inspector,/highlightPath/);
 });
 
 test('public browser has integrated zero-install repo execution',async()=>{
