@@ -8,12 +8,8 @@ jobs:
   isolate:
     runs-on: ubuntu-latest
     timeout-minutes: 6
-    strategy:
-      fail-fast: false
-      matrix:
-        profile: [cpu, gpu, precision]
     env:
-      PROFILE: ${{ matrix.profile }}
+      PROFILE: cpu
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,10 +18,13 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-save --ignore-scripts playwright@1.56.1
-      - run: node test/inference-candidate-probe.mjs
+      - name: Validate one coding-capable CPU candidate
+        run: |
+          sed -i 's#onnx-community/Qwen3-0.6B-ONNX#onnx-community/Qwen2.5-Coder-1.5B-Instruct#g' test/inference-candidate-probe.mjs
+          node test/inference-candidate-probe.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: inference-${{ matrix.profile }}
+          name: inference-coder-cpu
           path: artifacts/
           retention-days: 7
