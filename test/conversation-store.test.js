@@ -67,3 +67,12 @@ test('conversation store remains bounded and preserves recent messages/events',(
   const s=storage();for(let i=0;i<30;i++)snapshotChat(s,state(`task ${i}`),`chat-${i}`);assert.ok(listChats(s).length<=24);
   const latest=listChats(s)[0];assert.ok(Array.isArray(latest.state.messages));assert.ok(Array.isArray(latest.state.events));
 });
+
+test('conversation snapshots reuse UI compaction for large payloads',()=>{
+  const s=storage(),huge='z'.repeat(100000),value=state('large',huge,'large-run');value.events=[{id:'big',runId:'large-run',type:'tool:done',summary:huge,data:{stdout:huge}}];value.result.diff=huge;snapshotChat(s,value,'large');const saved=listChats(s)[0].state;
+  assert.equal(saved.messages.at(-1).text.length,12000);assert.equal(saved.events[0].summary.length,2000);assert.equal(saved.result.diff.length,50000);
+});
+
+test('oversized legacy chat storage is preserved and never synchronously parsed or overwritten',()=>{
+  const s=storage(),raw='x'.repeat(3500001);s.setItem('xrai-chats-v1',raw);s.setItem(ACTIVE_CHAT_KEY,'legacy');assert.deepEqual(listChats(s),[]);assert.equal(snapshotChat(s,state('new'),'legacy'),null);assert.equal(s.getItem('xrai-chats-v1'),raw);
+});
