@@ -15,37 +15,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Apply reviewed conversation fixes and learning integration
+      - name: Preserve current master and apply only learning upgrade
         run: |
-          python3 - <<'PY'
-          import json,hashlib,gzip,base64
-          from pathlib import Path
-          payload=json.loads(Path('.repair.json').read_text())
-          if isinstance(payload,dict):
-              raw=gzip.decompress(base64.b64decode(payload['gzip']))
-              assert hashlib.sha256(raw).hexdigest()==payload['sha256']
-              payload=json.loads(raw)
-          for entry in payload:
-              p=Path(entry['path'])
-              assert not p.is_absolute() and '..' not in p.parts
-              if 'text' in entry:
-                  p.parent.mkdir(parents=True,exist_ok=True)
-                  p.write_text(entry['text'])
-              else:
-                  assert hashlib.sha256(p.read_bytes()).hexdigest()==entry['sha'],str(p)
-                  lines=p.read_text().splitlines(True)
-                  for start,end,text in reversed(entry['hunks']):
-                      assert 0 <= start <= end <= len(lines), str(p)
-                      lines[start:end]=[text]
-                  p.write_text(''.join(lines))
-          p=Path('package.json');data=json.loads(p.read_text());data['version']='0.3.48';p.write_text(json.dumps(data,indent=2)+'\n')
-          p=Path('README.md');p.write_text(p.read_text().replace('v0.3.47','v0.3.48').replace('The evaluator remains internal evidence for learning; it is not the product response.','The evaluator supplies internal estimates, not execution proof. Browser suggestions remain candidates until a real verifier receipt exists. Sandbox patches are not committed or deployed.'))
-          PY
-          python3 .upgrade.py
+          mkdir -p /tmp/xrai-upgrade/web /tmp/xrai-upgrade/test
+          cp .upgrade.py /tmp/xrai-upgrade/
+          cp web/verified-repair.js /tmp/xrai-upgrade/web/
+          cp test/verified-repair.test.js test/learning.e2e.mjs /tmp/xrai-upgrade/test/
+          git checkout --detach 0da407af28cfecbdaac3e6dc0d37826bcc38dd28
+          cp /tmp/xrai-upgrade/web/* web/
+          cp /tmp/xrai-upgrade/test/* test/
+          python3 /tmp/xrai-upgrade/.upgrade.py
           python3 - <<'PY'
           from pathlib import Path
+          import json
           p=Path('web/app.js');s=p.read_text();old='livePatch?.runId===ui.result?.runId?';assert old in s;p.write_text(s.replace(old,'livePatch&&livePatch.runId===ui.result?.runId?'))
           p=Path('test/state.test.js');s=p.read_text();old='assert.equal(loaded.result.diff.length,50000)';assert old in s;p.write_text(s.replace(old,"assert.equal(loaded.result.diff,'','oversized patches must not be persisted as corrupt truncated diffs')")+"\ntest('complete small patches survive persistence unchanged',()=>{const storage=new MemoryStorage(),state=defaultUiState();const diff='diff --git a/a.js b/a.js\\n--- a/a.js\\n+++ b/a.js\\n@@ -1 +1 @@\\n-a\\n+b\\n';state.result={diff};saveUiState(storage,state);assert.equal(loadUiState(storage).result.diff,diff)});\n")
+          p=Path('test/learning.e2e.mjs');p.write_text(p.read_text().replace('await page.route(','await context.route('))
+          p=Path('package.json');data=json.loads(p.read_text());data['version']='0.3.50';p.write_text(json.dumps(data,indent=2)+'\n')
+          for p in [Path('README.md'),*Path('web').glob('*.js'),*Path('web').glob('*.html')]:
+              p.write_text(p.read_text().replace('0.3.49','0.3.50'))
           PY
       - name: Source and actual subprocess repair checks
         run: npm run check > source-checks.txt 2>&1
@@ -59,18 +47,16 @@ jobs:
         run: |
           mkdir -p artifacts
           cp source-checks.txt artifacts/ || true
+          git diff --stat > artifacts/change-summary.txt
           tar --exclude=node_modules --exclude=.git --exclude=artifacts -czf artifacts/source.tar.gz README.md package.json src web test knowledge .github
-      - name: Create tested commit without temporary repair infrastructure
+      - name: Commit only verified application changes
         run: |
           git config user.name JT5D
           git config user.email jtunick@theimclab.com
-          git rm --ignore-unmatch .repair.json .upgrade.py .github/workflows/repair-validation.yml
-          git restore --source=69c3440e4368820147de9ee8c53de6f92cc1fc08 --staged --worktree .github/workflows/pages.yml .github/workflows/ci.yml
-          git add README.md web test src knowledge package.json
-          tree=$(git write-tree)
-          commit=$(printf '%s\n' 'Add verified repair tools, persisted replay, rollback and conversation integrity' | git commit-tree "$tree" -p 69c3440e4368820147de9ee8c53de6f92cc1fc08)
-          git push origin "$commit:refs/heads/repair/verified-learning-tested-0348"
-          printf '%s\n' "$commit" > artifacts/tested-commit.txt
+          git add README.md web test package.json
+          git commit -m 'Add verified repair tools, persisted reuse and rollback'
+          git push origin HEAD:refs/heads/repair/verified-learning-tested-0350
+          git rev-parse HEAD > artifacts/tested-commit.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
