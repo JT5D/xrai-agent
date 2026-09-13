@@ -16,9 +16,14 @@ test('repo and test tasks route to execution while ordinary chat does not',()=>{
   assert.equal(taskNeedsExecutionHost('Explain evidence-gated skill learning simply'),false);
 });
 
-test('context injected for a vague follow-up does not accidentally rerun repo execution',()=>{
-  const followup='is it fixed?\n\nPrevious XRAI context (use this evidence; do not ask what "it" refers to):\nTask: review repo, fix any failed tests, verify & explain\nResult: npm test PASS';
+test('question follow-up references prior evidence without rerunning execution',()=>{
+  const followup='is it fixed?\n\nPrevious XRAI context (mode: reference; use this context automatically; do not ask the user to restate it):\nTask: review repo, fix any failed tests, verify & explain\nResult: npm test PASS';
   assert.equal(taskNeedsExecutionHost(followup),false);
+});
+
+test('retry follow-up reruns the prior execution task automatically',()=>{
+  const followup='try that again\n\nPrevious XRAI context (mode: retry; use this context automatically; do not ask the user to restate it):\nTask: review repo, fix any failed tests, verify & explain\nResult: dependency install failed';
+  assert.equal(taskNeedsExecutionHost(followup),true);
 });
 
 test('UI state v4 survives a reload with task, messages, events, and running status intact',()=>{
