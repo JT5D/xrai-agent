@@ -6,6 +6,7 @@ import { searchKnowledge } from './knowledge.js';
 import { formatSkills,getMetaPolicy,observeSkillCandidate,recordRunOutcome,recordSkillUsage,retrieveSkills } from './skills.js';
 import { outputText,response } from './openai.js';
 import { runOllamaTask } from './ollama.js';
+import { analyzeOrchestration } from './orchestration-policy.js';
 const execFileAsync=promisify(execFile);
 const MODEL=()=>process.env.XRAI_MODEL||'gpt-5.6-luna';
 const EFFORT=()=>process.env.XRAI_REASONING||'low';
@@ -36,16 +37,18 @@ const tools=[
 
 export async function runTask(task,opts={}){
   if(!process.env.OPENAI_API_KEY && !opts.forceOpenAI)return runOllamaTask(task,opts,{primitiveShell,primitiveKnowledge});
-  const runId=opts.runId||crypto.randomUUID(),root=workspace(opts.workspace),model=opts.model||MODEL(),maxDepth=opts.maxDepth??Number(process.env.XRAI_MAX_DEPTH||2),maxChildren=opts.maxChildren??Number(process.env.XRAI_MAX_CHILDREN||2),retries=opts.retries??Number(process.env.XRAI_MAX_RETRIES||1),learn=opts.learn??true;
+  const runId=opts.runId||crypto.randomUUID(),root=workspace(opts.workspace),model=opts.model||MODEL(),requestedDepth=opts.maxDepth??Number(process.env.XRAI_MAX_DEPTH||2),requestedChildren=opts.maxChildren??Number(process.env.XRAI_MAX_CHILDREN||2),requestedRetries=opts.retries??Number(process.env.XRAI_MAX_RETRIES||1),learn=opts.learn??true;
+  const policy=analyzeOrchestration(task,{maxDepth:requestedDepth,maxChildren:requestedChildren,maxRetries:requestedRetries}),maxDepth=policy.depth,maxChildren=policy.children,retries=policy.retries;
   const promotedSkills=await retrieveSkills(root,task,4),meta=await getMetaPolicy(root),skillContext=formatSkills(promotedSkills),metaGuidance=(meta.guidance||[]).join(' ');
-  bus.emitEvent(runId,'run:start',task,{data:{workspace:root,model,maxDepth,maxChildren,retries,skills:promotedSkills.map(s=>`${s.id}@v${s.version}`)}});
+  bus.emitEvent(runId,'run:start',task,{data:{workspace:root,model,maxDepth,maxChildren,retries,skills:promotedSkills.map(s=>`${s.id}@v${s.version}`),policy}});
+  bus.emitEvent(runId,'orchestration:policy',`${policy.mode} · depth ${policy.depth} · children ${policy.children} · retries ${policy.retries} · max turns ${policy.maxTurns}`,{name:'Adaptive orchestration',data:policy});
   for(const s of promotedSkills)bus.emitEvent(runId,'skill:hit',`${s.title} · ${Math.round(s.score*100)}%`,{name:'Promoted skill',data:{id:s.id,version:s.version,score:s.score,confidence:s.confidence}});
   let attempts=0,finalOutput='',score=0,finalEval=null,previousScore=null;
   async function runAgent(agentTask,depth=0,parentAgentId){
     const agentId=crypto.randomUUID();let children=0;bus.emitEvent(runId,'agent:start',agentTask,{agentId,parentAgentId,name:depth?'Child agent':'Root agent'});
     let previous_response_id,input=agentTask;
-    for(let turn=0;turn<32;turn++){
-      const r=await response({model,reasoning:{effort:EFFORT()},instructions:`You are XRAI Agent, a compact execution agent. Complete the task end-to-end. Prefer evidence, inspect before editing, make minimal changes, test/verify, and report concrete results. Never fabricate tool results. Workspace root: ${root}. The shell is workspace-rooted but not an OS sandbox, so do not access unrelated files.\n\nPROMOTED SKILLS (reuse only when relevant; evidence outranks memory):\n${skillContext}\n\nMETA-SKILL GUIDANCE:\n${metaGuidance}`,input,previous_response_id,tools,parallel_tool_calls:false,store:true});
+    for(let turn=0;turn<policy.maxTurns;turn++){
+      const r=await response({model,reasoning:{effort:process.env.XRAI_REASONING||policy.reasoning||EFFORT()},instructions:`You are XRAI Agent, a compact execution agent. Complete the task end-to-end. Prefer evidence, inspect before editing, make minimal changes, test/verify, and report concrete results. Never fabricate tool results. Use delegation only when work is genuinely separable and the expected information gain exceeds its latency. Workspace root: ${root}. The shell is workspace-rooted but not an OS sandbox, so do not access unrelated files.\n\nPROMOTED SKILLS (reuse only when relevant; evidence outranks memory):\n${skillContext}\n\nMETA-SKILL GUIDANCE:\n${metaGuidance}`,input,previous_response_id,tools,parallel_tool_calls:false,store:true});
       previous_response_id=r.id;const calls=(r.output||[]).filter(x=>x.type==='function_call');
       if(!calls.length){const out=outputText(r)||'Completed without a text response.';bus.emitEvent(runId,'agent:done',out.slice(0,900),{agentId,parentAgentId});return out}
       const outputs=[];
@@ -60,12 +63,12 @@ export async function runTask(task,opts={}){
       }
       input=outputs;
     }
-    throw new Error('Agent exceeded 32 tool turns.');
+    throw new Error(`Agent exceeded adaptive ${policy.maxTurns}-turn budget.`);
   }
   async function evaluate(candidate,trace){
     const skillSchema={type:'object',properties:{title:{type:'string'},trigger:{type:'string'},procedure:{type:'string'},verifier:{type:'string'},tags:{type:'array',items:{type:'string'},maxItems:8}},required:['title','trigger','procedure','verifier','tags'],additionalProperties:false};
     const schema={type:'object',properties:{score:{type:'number',minimum:0,maximum:1},pathScore:{type:'number',minimum:0,maximum:1},critique:{type:'string'},pathCritique:{type:'string'},skill:{...skillSchema}},required:['score','pathScore','critique','pathCritique','skill'],additionalProperties:false};
-    const r=await response({model,reasoning:{effort:'low'},instructions:`Strictly grade both the final result and the execution path against the user task. Result score measures completeness and correctness. Path score measures whether the agent used grounded evidence, appropriate tools, verification, and an efficient non-looping route; tool errors or unsupported claims should lower it, while necessary exploration should not. Score 1 only when the result is complete and the path is well-grounded and verified. If and only if a reusable procedure is supported by this run, propose one narrow skill. A skill must contain no secrets or personal data. Use an empty title/trigger/procedure/verifier/tags when no reusable skill is justified. The verifier, when present, should be one safe test/check/lint/build command that directly validates the procedure. ${metaGuidance}`,input:`TASK:\n${task}\n\nCANDIDATE:\n${candidate}\n\nEXECUTION TRACE SUMMARY:\n${JSON.stringify(trace)}`,text:{format:{type:'json_schema',name:'xrai_eval',schema,strict:true}},store:false});
+    const r=await response({model,reasoning:{effort:'low'},instructions:`Strictly grade both the final result and the execution path against the user task. Result score measures completeness and correctness. Path score measures whether the agent used grounded evidence, appropriate tools, verification, and an efficient non-looping route; tool errors or unsupported claims should lower it, while necessary exploration should not. Penalize unnecessary delegation or retries that did not add evidence. Score 1 only when the result is complete and the path is well-grounded and verified. If and only if a reusable procedure is supported by this run, propose one narrow skill. A skill must contain no secrets or personal data. Use an empty title/trigger/procedure/verifier/tags when no reusable skill is justified. The verifier, when present, should be one safe test/check/lint/build command that directly validates the procedure. ${metaGuidance}`,input:`TASK:\n${task}\n\nCANDIDATE:\n${candidate}\n\nEXECUTION TRACE SUMMARY:\n${JSON.stringify(trace)}`,text:{format:{type:'json_schema',name:'xrai_eval',schema,strict:true}},store:false});
     const ev=JSON.parse(outputText(r));ev.score=clamp(ev.score);ev.pathScore=clamp(ev.pathScore);ev.compositeScore=Math.min(ev.score,ev.pathScore+.15);return ev;
   }
   let feedback='';
@@ -83,6 +86,6 @@ export async function runTask(task,opts={}){
     const title=learning.skill?.title||finalEval.skill.title||'Skill';
     bus.emitEvent(runId,`skill:${learning.status}`,`${title} — ${learning.reason}`,{name:'Skill gate',data:{id:learning.id,version:learning.version,status:learning.status,verified:learning.verified,supportCount:learning.supportCount,baseline:learning.baseline,candidateScore:learning.candidateScore}});
   }
-  const maintenance=await recordRunOutcome(root,{task,score,skills:promotedSkills,candidateDecision:learning});if(maintenance)bus.emitEvent(runId,'meta:update',`Meta-skill v${maintenance.meta.version} · avg score ${Math.round(maintenance.meta.metrics.avgScore*100)}%${maintenance.actions.length?` · ${maintenance.actions.join(', ')}`:''}`,{name:'Slow learning loop',data:maintenance});
-  bus.emitEvent(runId,'run:done',finalOutput.slice(0,1200),{data:{score,attempts,learning:learning.status,pathScore:finalEval?.pathScore}});return{runId,output:finalOutput,score,attempts,learning,events:bus.forRun(runId)}
+  const maintenance=await recordRunOutcome(root,{task,score,skills:promotedSkills,candidateDecision:learning,policy});if(maintenance)bus.emitEvent(runId,'meta:update',`Meta-skill v${maintenance.meta.version} · avg score ${Math.round(maintenance.meta.metrics.avgScore*100)}%${maintenance.actions.length?` · ${maintenance.actions.join(', ')}`:''}`,{name:'Slow learning loop',data:maintenance});
+  bus.emitEvent(runId,'run:done',finalOutput.slice(0,1200),{data:{score,attempts,learning:learning.status,pathScore:finalEval?.pathScore,policy}});return{runId,output:finalOutput,score,attempts,learning,events:bus.forRun(runId)}
 }
