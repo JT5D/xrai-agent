@@ -103,6 +103,9 @@ test('public browser has integrated zero-install repo execution',async()=>{
   assert.match(html,/coi-bootstrap\.js/);
   assert.doesNotMatch(html,/repo-runtime\.js/);
   assert.match(bootstrap,/serviceWorker\.register/);
+  assert.match(bootstrap,/updateViaCache:'none'/);
+  assert.match(sw,/cache:'no-store'/);
+  assert.match(sw,/request\.mode==='navigate'/);
   assert.match(sw,/Cross-Origin-Opener-Policy/);
   assert.match(sw,/Cross-Origin-Embedder-Policy/);
 });
