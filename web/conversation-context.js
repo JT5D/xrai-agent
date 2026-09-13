@@ -1,7 +1,7 @@
 import { visibleTask,isContextualFollowup } from './input-guard.js';
 const FOLLOWUP=/\b(?:previous|these|those|this|that|our|chat history|recommendations?|plans?)\b/i;
 export function isContinuation(task=''){
-  return isContextualFollowup(task)||(/\b(?:do|execute|implement|apply|finish|continue|verify|fix|remember)\b/i.test(task)&&FOLLOWUP.test(task));
+  return /^(?:did|have|has|was|were|is|are|what|which)\b[\s\S]*\b(?:improvements?|plans?|changes?|executed|implemented|installed|verified|done|finished|working)\b/i.test(task.trim())||isContextualFollowup(task)||(/\b(?:do|execute|implement|apply|finish|continue|verify|fix|remember)\b/i.test(task)&&FOLLOWUP.test(task));
 }
 export function conversationContext(state={},task=''){
   const prior=state.context||{};
@@ -18,6 +18,7 @@ export function conversationContext(state={},task=''){
   return {repo,goal:String(goal).slice(0,2000),messages,previousResult:state.result};
 }
 export function executionIntent(task='',context={}){
+  task=task.trim().replace(/^(?:can|could|would)\s+you\s+(?:please\s+)?(?=(?:fix|repair|implement|install|refactor|modify|edit|patch|execute|run|verify)\b)/i,'');
   if(/^(?:did|does|has|have|is|are|what|why|can|could|should|remember|summarize|explain)\b/i.test(task.trim()))return false;
   if(/^(?:please\s+)?(?:try|retry|again|repeat|rerun)\b/i.test(task.trim()))return executionIntent(context.goal||'',{});
   if(/^\s*(?:research|search|look up)\b/i.test(task)&&! /\b(?:implement|install|integrate|fix|refactor|apply|edit)\b/i.test(task))return false;
@@ -34,7 +35,7 @@ export function contextualResearchQuery(task='',context={}){
 }
 export function requestsChanges(task='',context={}){
   const target=isContinuation(task)?`${task} ${context.goal||''}`:task;
-  return /\b(?:improve|improvements?|implement|install|integrate|refactor|modify|add|recommendations?)\b/i.test(target);
+  return /\b(?:fix|repair|edit|patch|change)\b/i.test(target.replace(/\b(?:fix|repair)\s+(?:any\s+)?(?:failed|failing|broken)\s+tests?\b/ig,''))||/\b(?:improve|improvements?|implement|install|integrate|refactor|modify|add|recommendations?)\b/i.test(target);
 }
 export function reasoningOutput(text=''){
   // A language-model answer is not an execution receipt.
