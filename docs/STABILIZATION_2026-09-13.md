@@ -18,8 +18,12 @@ A bounded alternative tested the already-integrated LFM2.5 350M model as the def
 
 An earlier attempted module-route override was intercepted by the service worker and still ran SmolLM2. Its report explicitly shows that provider; it is not LFM evidence. The subsequent local-server preflight above confirmed LFM via a provider assertion.
 
+A separate source-backed LFM2.5 350M q4 candidate with shortened conversation instructions passed 110 source tests but again returned `2` in the real WebGPU test (run `34789636207`, artifact `local-model-quality-validation`). It was not promoted.
+
+The CPU reference run `34789790346` attempted the same LFM2.5 350M q4 export with Transformers.js 4.0.1 and real WASM inference. Initialization failed: `Could not find an implementation for GatherBlockQuantized(1)` at `/model/embed_tokens/Gather_Quant`. No CPU answers were generated, so this does not establish whether WebGPU caused the incorrect output. Evidence: artifact `local-model-cpu-reference` (10328390274). A generic q4-to-WASM fallback is not valid for this tested export/runtime combination.
+
 ## Next priority
 
-Isolate inference correctness before more UI changes or another blind model swap: compare the same model's minimal prompt and full conversation prompt, verify chat-template/tokenization, and compare WebGPU versus WASM with deterministic generation. Keep the arithmetic assertion and add real multi-turn context checks. Do not hardcode a known answer, replace the failing test with a model-ready check, or call mocked responses real inference. Promote a replacement only after genuine outputs pass and mobile memory limits are measured.
+Isolate inference correctness before more UI changes or another blind model swap: use a supported model-export/backend/runtime combination, compare minimal and full conversation prompts, verify chat-template/tokenization, and compare genuine WebGPU versus WASM results where both are supported. Keep the arithmetic assertion and add real multi-turn context checks. Do not hardcode a known answer, replace the failing test with a model-ready check, or call mocked responses real inference. Promote a replacement only after genuine outputs pass and mobile memory limits are measured.
 
 No further publishing or recurring experiments are authorized by this status document; it records findings only.
