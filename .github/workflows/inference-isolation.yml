@@ -1,0 +1,90 @@
+name: Isolate real browser inference
+on:
+  push:
+    branches: [repair/inference-isolation-20260913]
+permissions:
+  contents: read
+jobs:
+  isolate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [smol-gpu, smol-cpu, lfm-gpu, qwen-cpu]
+    env:
+      PROFILE: ${{ matrix.profile }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save --ignore-scripts playwright@1.56.1
+      - name: Compare minimal and real application prompts
+        run: |
+          mkdir -p artifacts
+          cat > .inference-probe.mjs <<'JS'
+          import fs from 'node:fs/promises';
+          import http from 'node:http';
+          import path from 'node:path';
+          import {chromium} from 'playwright';
+          const profiles={
+            'smol-gpu':{modelId:'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA',device:'webgpu',dtype:'q4f16'},
+            'smol-cpu':{modelId:'onnx-community/SmolLM2-135M-Instruct-ONNX-MHA',device:'wasm',dtype:'q4'},
+            'lfm-gpu':{modelId:'onnx-community/LFM2.5-350M-ONNX',device:'webgpu',dtype:'q4'},
+            'qwen-cpu':{modelId:'onnx-community/Qwen2.5-0.5B-Instruct',device:'wasm',dtype:'q4'}
+          };
+          const profile={...profiles[process.env.PROFILE],maxNewTokens:180,label:process.env.PROFILE};
+          const file='web/local-agent.js',source=await fs.readFile(file,'utf8');
+          const needle='const preferred=await resolveBrowserModelProfile(navigator,true),';
+          if(!source.includes(needle))throw Error('Loader changed; inspect before patching');
+          await fs.writeFile(file,source.replace(needle,`const preferred=${JSON.stringify(profile)},`));
+          const root=path.resolve('web'),report={profile,mocked:[],cases:[],errors:[]};
+          const checkpoint=async()=>fs.writeFile('artifacts/inference.json',JSON.stringify(report,null,2));
+          const timer=setTimeout(()=>{report.error='Hard 270s diagnostic deadline';checkpoint().finally(()=>process.exit(124));},270000);
+          const server=http.createServer(async(req,res)=>{
+            const url=new URL(req.url,'http://local'),p=path.resolve(root,'.'+url.pathname);
+            const headers={'Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'require-corp','Cache-Control':'no-store'};
+            if(url.pathname==='/probe'){res.writeHead(200,{...headers,'Content-Type':'text/html'});res.end('<title>Inference isolation</title>');return}
+            if(!p.startsWith(root+path.sep)){res.writeHead(403);res.end();return}
+            try{res.writeHead(200,{...headers,'Content-Type':p.endsWith('.js')?'text/javascript':'text/plain'});res.end(await fs.readFile(p))}catch{res.writeHead(404);res.end()}
+          });
+          await new Promise(r=>server.listen(0,'127.0.0.1',r));
+          let browser;
+          try{
+            browser=await chromium.launch({channel:'chrome',headless:true,args:['--enable-unsafe-webgpu','--enable-unsafe-swiftshader','--enable-features=Vulkan','--use-angle=vulkan','--use-vulkan=swiftshader','--disable-vulkan-surface']});
+            const page=await browser.newPage();page.on('pageerror',e=>report.errors.push(e.message));
+            await page.goto(`http://127.0.0.1:${server.address().port}/probe`);
+            const started=Date.now();
+            report.provider=await page.evaluate(async()=>{globalThis.agent=await import('/local-agent.js');globalThis.model=await agent.getLocalModel();return model.name});
+            report.loadMs=Date.now()-started;await checkpoint();
+            const cases=[
+              {name:'minimal-math',task:'What is 2 + 2? Reply with only the number.',minimal:true},
+              {name:'app-math',task:'What is 2 + 2? Reply with only the number.'},
+              {name:'app-instruction',task:'My project code is cobalt-47. Reply with only that code.'},
+              {name:'app-recall',task:'What is my project code? Reply with only the code.',messages:[{role:'user',content:'My project code is cobalt-47. Reply with only that code.'},{role:'assistant',content:'cobalt-47'}]},
+              {name:'patch',task:'Fix src/sum.js using the failing test evidence. Return JSON only: {"summary":"diagnosis","edits":[{"path":"src/sum.js","search":"exact existing text","replace":"replacement"}]}.\n--- src/sum.js ---\nexport function sum(a,b){return a-b;}\n--- test/sum.test.js ---\nassert.equal(sum(7,5),12);\n--- npm test exit 1 ---\nExpected 12; actual 2. Do not modify tests.',minimal:true}
+            ];
+            for(const c of cases){
+              const start=Date.now();
+              try{
+                const output=await page.evaluate(async c=>c.minimal?model.prompt([{role:'user',content:c.task}]):(await agent.runLocalTask(c.task,{conversation:{repo:'JT5D/xrai-agent',goal:'',messages:c.messages||[]}})).output,c);
+                const ok=c.name.endsWith('math')?/^4[.!]?$/.test(output.trim()):c.name==='patch'?(()=>{try{const p=JSON.parse(output.replace(/^```(?:json)?\s*|\s*```$/g,''));return p.edits?.some(e=>e.path==='src/sum.js'&&e.search&&e.replace?.includes('+'))}catch{return false}})():/cobalt-47/.test(output);
+                report.cases.push({name:c.name,output,ok,ms:Date.now()-start});
+              }catch(e){report.cases.push({name:c.name,ok:false,error:e.message,ms:Date.now()-start})}
+              await checkpoint();
+            }
+            report.ok=report.cases.length===cases.length&&report.cases.every(c=>c.ok);
+          }catch(e){report.error=e.message;report.ok=false}
+          finally{await checkpoint();console.log(JSON.stringify(report));clearTimeout(timer);await browser?.close();server.close()}
+          if(!report.ok)process.exitCode=1;
+          JS
+          node .inference-probe.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: inference-${{ matrix.profile }}
+          path: artifacts/
+          retention-days: 7
