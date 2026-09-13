@@ -19,6 +19,17 @@ export function stateLooksStale(value){
   return /public github pages runtime does not have those capabilities|open runtime and use the local execution host|api\.github\.com\/repos\/(?:filesystem|api\.github\.com)|filesystem\/repository/i.test(hay);
 }
 
+export function purgeStaleUiState(storage=globalThis.localStorage){
+  let removed=false;
+  for(const key of [CURRENT_UI_KEY,LEGACY_UI_KEY]){
+    try{
+      const raw=storage?.getItem(key);if(!raw)continue;
+      if(stateLooksStale(JSON.parse(raw))){storage.removeItem(key);removed=true}
+    }catch{}
+  }
+  return removed;
+}
+
 export function migrateLegacyUiState(storage=globalThis.localStorage){
   try{
     if(storage?.getItem(CURRENT_UI_KEY))return false;
@@ -42,6 +53,7 @@ export function contextualizeFollowup(task,storage=globalThis.localStorage){
 }
 
 if(typeof window!=='undefined'&&typeof document!=='undefined'){
+  purgeStaleUiState(window.localStorage);
   migrateLegacyUiState(window.localStorage);
   document.addEventListener('submit',event=>{
     const form=event.target;if(!(form instanceof HTMLFormElement)||form.id!=='chatForm')return;
