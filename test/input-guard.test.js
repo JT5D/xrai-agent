@@ -40,7 +40,7 @@ test('current stale browser state is purged after execution upgrades',()=>{
 });
 
 test('question follow-up gets previous run evidence internally',()=>{
-  const state={lastTask:'review repo, fix failed tests, verify & explain',messages:[{role:'user',text:'review repo, fix failed tests, verify & explain'}],result:{output:'Verification passed: 27/27 tests.'}};
+  const state={version:4,lastTask:'review repo, fix failed tests, verify & explain',messages:[{role:'user',text:'review repo, fix failed tests, verify & explain'}],result:{output:'Verification passed: 27/27 tests.'}};
   const storage=new MemoryStorage({'xrai-ui-v4':JSON.stringify(state)});
   const text=contextualizeFollowup('is it fixed?',storage);
   assert.match(text,/mode: reference/);
@@ -50,6 +50,7 @@ test('question follow-up gets previous run evidence internally',()=>{
 
 test('retry followups find the prior meaningful task without changing visible text',()=>{
   const state={
+    version:4,
     lastTask:'try that again\n\nPrevious XRAI context (mode: retry):\nTask: review repo, fix any failed tests, verify & explain',
     messages:[
       {role:'user',text:'review repo, fix any failed tests, verify & explain'},
