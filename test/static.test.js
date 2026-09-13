@@ -50,12 +50,14 @@ test('public browser version and cache-busted runtime assets stay synchronized',
   const pkg=JSON.parse(await fs.readFile(new URL('../package.json',import.meta.url),'utf8'));
   const version=String(pkg.version).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
   assert.match(html,new RegExp(`<dt>Version<\\/dt><dd>${version}<\\/dd>`));
-  for(const asset of ['coi-bootstrap.js','static-runtime.js','input-guard.js','browser-enhancements.js','event-inspector.js','improvement-guard.js','app.js'])assert.match(html,new RegExp(`${asset.replace('.','\\.')}\\?v=${version}`));
+  for(const asset of ['coi-bootstrap.js','static-runtime.js','input-guard.js','browser-enhancements.js','event-inspector.js','policy-inspector.js','improvement-guard.js','app.js'])assert.match(html,new RegExp(`${asset.replace('.','\\.')}\\?v=${version}`));
 });
 
-test('public graph ships hover, expand, inspector, fit, zoom, pan, and keyboard interaction',async()=>{
+test('public graph ships hover, expand, inspector, fit, zoom, pan, keyboard interaction, and policy evolution',async()=>{
   const inspector=await fs.readFile(new URL('../web/event-inspector.js',import.meta.url),'utf8');
+  const policy=await fs.readFile(new URL('../web/policy-inspector.js',import.meta.url),'utf8');
   assert.match(inspector,/graph-tooltip/);assert.match(inspector,/dblclick/);assert.match(inspector,/toggleExpanded/);assert.match(inspector,/fitGraph/);assert.match(inspector,/pointerdown/);assert.match(inspector,/data-event-id|eventId/);assert.match(inspector,/aria-label/);assert.match(inspector,/highlightPath/);
+  assert.match(policy,/Orchestration policy evolution/);assert.match(policy,/Promotion \/ rollback decisions/);assert.match(policy,/Comparable evidence only/);
 });
 
 test('public browser has integrated zero-install repo execution',async()=>{
