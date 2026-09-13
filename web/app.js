@@ -1,12 +1,14 @@
 import { clearUiState,isConstrainedDevice,loadUiState,saveUiState,taskNeedsExecutionHost } from './state.js';
 import { CHAT_SWITCH_KEY } from './conversation-store.js';
 import { browserRepoSupport,runBrowserRepoTask } from './browser-workspace.js';
+import { isRetryFollowup } from './input-guard.js';
 
 const $=s=>document.querySelector(s);
 const $$=s=>[...document.querySelectorAll(s)];
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const yieldToBrowser=()=>new Promise(resolve=>{if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>setTimeout(resolve,0));else setTimeout(resolve,16)});
 const uid=()=>globalThis.crypto?.randomUUID?.()||`xrai-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
+const RETRY_PENDING_KEY='xrai-retry-pending-v1';
 let ui=loadUiState(localStorage);
 try{if(sessionStorage.getItem(CHAT_SWITCH_KEY))sessionStorage.removeItem(CHAT_SWITCH_KEY)}catch{}
 let mode='detecting';
@@ -17,7 +19,7 @@ let pollingRunId=null;
 const welcome={id:'welcome',role:'agent',text:'Give me a task. On compatible desktop browsers I can inspect, test, and repair public Node/JS/TS repositories in an isolated zero-install browser sandbox. I report real command evidence and never fabricate repo access.',ts:Date.now(),runId:null};
 if(!ui.messages.length)ui.messages=[welcome];
 
-function persist(){try{if(sessionStorage.getItem(CHAT_SWITCH_KEY))return}catch{}ui=saveUiState(localStorage,ui)}
+function persist(){try{if(sessionStorage.getItem(CHAT_SWITCH_KEY)||sessionStorage.getItem(RETRY_PENDING_KEY))return}catch{}ui=saveUiState(localStorage,ui)}
 function escTime(ts){try{return new Date(ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}catch{return''}}
 function makeEvent(type,summary,extra={}){return{id:uid(),runId:ui.activeRunId||uid(),ts:Date.now(),type,summary,...extra}}
 function activeEvents(){return ui.events.filter(e=>e.runId===ui.activeRunId)}
@@ -253,7 +255,7 @@ function renderAll(){
 }
 
 $('#chatForm').addEventListener('submit',e=>{e.preventDefault();const task=$('#task').value.trim();if(!task)return;$('#task').value='';run(task)});
-$('#rerun').addEventListener('click',()=>ui.lastTask&&run(ui.lastTask));
+$('#rerun').addEventListener('click',()=>{if(!ui.lastTask)return;const latestUser=[...ui.messages].reverse().find(m=>m?.role==='user');run(ui.lastTask,{resume:Boolean(latestUser&&isRetryFollowup(latestUser.text))})});
 $('#clear').addEventListener('click',reset);
 $('#runtimeButton').addEventListener('click',()=>setView('runtime'));
 $('#chatFocusButton').addEventListener('click',()=>setView('chat'));
