@@ -1,0 +1,56 @@
+name: Validate transcript routing
+on:
+  push:
+    branches: [repair/transcript-routing-0349]
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply reviewed patch with baseline hashes
+        run: |
+          python3 - <<'PY'
+          import base64,gzip,hashlib,json
+          from pathlib import Path
+          packed='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'
+          raw=gzip.decompress(base64.b64decode(packed))
+          assert hashlib.sha256(raw).hexdigest()=='7f024d1b93f8be5de89f2819d3a41f0f46637af4dc12f991f6ffed91f1c5959e'
+          for e in json.loads(raw):
+              p=Path(e['path']);assert not p.is_absolute() and '..' not in p.parts
+              if 'text' in e:p.write_text(e['text'])
+              else:
+                  assert hashlib.sha256(p.read_bytes()).hexdigest()==e['sha'],str(p)
+                  lines=p.read_text().splitlines(True)
+                  for a,b,s in reversed(e['hunks']):lines[a:b]=[s]
+                  p.write_text(''.join(lines))
+          PY
+      - name: Verify source and conversation UI
+        run: |
+          mkdir -p artifacts
+          npm run check > artifacts/source-checks.txt 2>&1
+          npm install --no-save --ignore-scripts playwright@1.55.0
+          node test/conversation.e2e.mjs
+      - name: Publish clean tested candidate
+        run: |
+          git config user.name JT5D
+          git config user.email jtunick@theimclab.com
+          git rm .github/workflows/finish-routing.yml
+          git add web test package.json README.md
+          tree=$(git write-tree)
+          commit=$(printf '%s\n' 'Fix exact transcript research and follow-up execution routing' | git commit-tree "$tree" -p be6ddc2bf09208c92051b08a766ee007779cc035)
+          git push origin "$commit:refs/heads/repair/transcript-routing-0349-tested"
+          printf '%s\n' "$commit" > artifacts/tested-commit.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: transcript-routing-validation
+          path: artifacts/
+          retention-days: 7
