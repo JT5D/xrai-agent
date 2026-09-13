@@ -14,7 +14,7 @@ export const CAPABILITIES=[
   ['On-device chat/reasoning','Runs locally in supported browsers; no user model API key required.'],
   ['No-key web research','Federated live search across no-key public sources with parallel fallbacks and source URLs.'],
   ['XRAI knowledge retrieval','Uses the bundled XRAI knowledgebase plus promoted evidence-gated skills.'],
-  ['Public repo execution','Imports public Node/JS/TS repos into an isolated WebContainer on compatible desktop Chromium.'],
+  ['Public repo execution','Imports public Node/JS/TS repos into an isolated WebContainer on supported modern browsers; mobile support is beta and memory-limited.'],
   ['Real verification','Runs actual package test/check/lint/build commands and trusts exit codes over model confidence.'],
   ['Bounded repair + patch','Makes constrained sandbox edits, re-verifies, and produces a downloadable patch.'],
   ['Visible orchestration','Shows observable agents, tools, retrieval, verification, retries, and learning events.'],

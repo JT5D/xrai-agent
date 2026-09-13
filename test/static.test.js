@@ -132,7 +132,8 @@ test('public browser has integrated zero-install repo execution',async()=>{
   assert.match(app,/taskNeedsExecutionHost/);
   assert.match(app,/downloadPatch/);
   assert.match(workspace,/@webcontainer\/api@1\.6\.4/);
-  assert.match(workspace,/coep:'credentialless'/);
+  assert.match(workspace,/coep:'require-corp'/);
+  assert.match(sw,/Cross-Origin-Embedder-Policy','require-corp'/);
   assert.match(workspace,/\.teardown\(\)/);
   assert.match(workspace,/command timed out/);
   assert.match(workspace,/raw\.githubusercontent\.com/);

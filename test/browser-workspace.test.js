@@ -10,8 +10,11 @@ test('repo parser finds GitHub URLs and defaults to XRAI itself',()=>{
 
 test('zero-install repo lane is explicit about browser compatibility',()=>{
   assert.equal(browserRepoSupport({userAgent:'Mozilla Chrome/140 Safari/537.36'}).supported,true);
-  assert.equal(browserRepoSupport({userAgent:'Mozilla iPhone Mobile Safari/605.1'}).supported,false);
-  assert.equal(browserRepoSupport({userAgent:'Mozilla Firefox/145'}).supported,false);
+  assert.equal(browserRepoSupport({userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'}).supported,true);
+  assert.equal(browserRepoSupport({userAgent:'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/140 Mobile Safari/537.36'}).supported,true);
+  assert.equal(browserRepoSupport({userAgent:'Mozilla iPhone OS 16_3 Mobile Safari/605.1'}).supported,false);
+  assert.equal(browserRepoSupport({userAgent:'Mozilla Firefox/145'}).supported,true);
+  assert.equal(browserRepoSupport({userAgent:'Mozilla Chrome/140 Safari/537.36'},{document:{},crossOriginIsolated:false,SharedArrayBuffer}).supported,false);
 });
 
 test('repo selection prioritizes package metadata, lockfiles, tests, and source',()=>{

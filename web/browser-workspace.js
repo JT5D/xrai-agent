@@ -16,11 +16,18 @@ export function parseGitHubRepo(task='',fallback=DEFAULT_REPO){
   return fallback;
 }
 
-export function browserRepoSupport(nav=globalThis.navigator||{}){
+export function browserRepoSupport(nav=globalThis.navigator||{},runtime=globalThis){
   const ua=String(nav.userAgent||'');
   const chromium=/Chrome|Chromium|Edg\//i.test(ua)&&!/CriOS/i.test(ua);
   const mobile=/iPhone|iPad|iPod|Android|Mobile/i.test(ua);
-  return {supported:chromium&&!mobile,chromium,mobile,reason:mobile?'Repo execution currently needs a desktop browser.':chromium?'':'Repo execution currently uses the Chromium WebContainer runtime.'};
+  const ios=/iPhone|iPad|iPod/i.test(ua),iosVersion=ua.match(/OS (\d+)[._](\d+)/i),iosSupported=ios&&iosVersion&&(Number(iosVersion[1])>16||(Number(iosVersion[1])===16&&Number(iosVersion[2])>=4));
+  const androidSupported=/Android/i.test(ua)&&/Chrome|Chromium|Firefox|FxiOS/i.test(ua);
+  const safariVersion=ua.match(/Version\/(\d+)\.(\d+)/i),desktopSafari=!mobile&&/Safari/i.test(ua)&&!/Chrome|Chromium|Edg/i.test(ua)&&safariVersion&&(Number(safariVersion[1])>16||(Number(safariVersion[1])===16&&Number(safariVersion[2])>=4));
+  const firefox=!mobile&&/Firefox\/(\d+)/i.test(ua),browserSupported=chromium||iosSupported||androidSupported||desktopSafari||firefox;
+  const isolationReady=runtime?.crossOriginIsolated===true&&typeof runtime?.SharedArrayBuffer==='function';
+  const supported=Boolean(browserSupported&&(!runtime?.document||isolationReady));
+  const reason=!browserSupported?'This browser does not meet the WebContainer runtime requirements. Use Safari 16.4+, recent Android Chrome/Firefox, or a current desktop browser.':runtime?.document&&!isolationReady?'Secure browser isolation is unavailable. Reload once; if it remains unavailable, check private-browsing or content-blocking settings.':'';
+  return {supported,chromium,mobile,mobileBeta:mobile&&Boolean(browserSupported),isolationReady,reason};
 }
 
 function fileRank(file){
@@ -63,7 +70,7 @@ export async function inspectPublicRepo(repo,progress=()=>{}){
 }
 
 function toMountTree(files){const root={};for(const {path,text} of files){const parts=path.split('/');let node=root;for(let i=0;i<parts.length-1;i++)node=node[parts[i]]||(node[parts[i]]={directory:{}}),node=node.directory;node[parts.at(-1)]={file:{contents:text}}}return root}
-async function bootWebContainer(progress=()=>{}){progress('Booting fresh zero-install Node sandbox…');const{WebContainer}=await import(WC_CDN);return WebContainer.boot({coep:'credentialless',workdirName:'xrai-workspace'})}
+async function bootWebContainer(progress=()=>{}){progress('Booting fresh zero-install Node sandbox…');const{WebContainer}=await import(WC_CDN);return WebContainer.boot({coep:'require-corp',workdirName:'xrai-workspace'})}
 
 async function runProcess(wc,cmd,args=[],progress=()=>{},timeoutMs=VERIFY_TIMEOUT_MS,cwd){
   progress(`$ ${cmd} ${args.join(' ')}`.trim());const p=await wc.spawn(cmd,args,cwd?{cwd}:undefined);let out='',timedOut=false;

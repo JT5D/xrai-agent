@@ -16,7 +16,7 @@ test('deployed browser E2E separates deterministic chat semantics from real mode
   assert.match(e2e,/--use-vulkan=swiftshader/);
   assert.match(e2e,/--use-webgpu-adapter=swiftshader/);
   assert.match(e2e,/webgpuAdapter/);
-  assert.match(workflow,/flow: \[chat-retry, mobile-chat, model-runtime, web, repo\]/);
-  assert.match(workflow,/\[ "\$\{\{ matrix\.flow \}\}" = "repo" \] \|\| \[ "\$\{\{ matrix\.flow \}\}" = "model-runtime" \]/);
+  assert.match(workflow,/flow: \[chat-retry, mobile-chat, mobile-repo, model-runtime, web, repo\]/);
+  assert.match(workflow,/\[ "\$\{\{ matrix\.flow \}\}" = "repo" \] \|\| \[ "\$\{\{ matrix\.flow \}\}" = "mobile-repo" \]/);
   assert.match(workflow,/xvfb-run -a node test\/live-pages\.e2e\.mjs/);
 });

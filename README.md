@@ -1,4 +1,4 @@
-# XRAI Agent v0.3.46
+# XRAI Agent v0.3.47
 
 Small, transparent recursive AI agent with **grounded runtime capabilities**, **no-key web research**, zero-install browser repo execution, and evidence-gated skill evolution.
 
@@ -29,7 +29,7 @@ Capability questions are answered from a deterministic runtime catalog rather th
 - on-device chat/reasoning
 - no-key live web research with multiple independent public-source fallbacks
 - XRAI knowledge + promoted skills retrieval
-- public Node/JS/TS repo inspection and execution in an isolated WebContainer on compatible desktop Chromium
+- public Node/JS/TS repo inspection and execution in an isolated WebContainer on supported modern browsers (mobile beta; device memory limits apply)
 - real test/check/lint/build verification using process exit codes
 - bounded sandbox repair + re-verification + downloadable patch
 - visible orchestration/events
@@ -53,7 +53,7 @@ Fresh/current research requests are routed to this tool before local-model synth
 
 ### Zero-install public repo execution
 
-On compatible desktop Chromium browsers:
+On supported modern browsers, including recent iOS/iPadOS Safari and Android browsers in beta:
 
 ```text
 review repo, fix failed tests, verify & explain

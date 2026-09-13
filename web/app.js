@@ -16,7 +16,7 @@ let capabilities=null;
 let sse=null;
 let pollingRunId=null;
 
-const welcome={id:'welcome',role:'agent',text:'Give me a task. On compatible desktop browsers I can inspect, test, and repair public Node/JS/TS repositories in an isolated zero-install browser sandbox. I report real command evidence and never fabricate repo access.',ts:Date.now(),runId:null};
+const welcome={id:'welcome',role:'agent',text:'Give me a task. On compatible modern browsers I can inspect, test, and repair public Node/JS/TS repositories in an isolated zero-install browser sandbox. Mobile support is beta and memory-limited. I report real command evidence and never fabricate repo access.',ts:Date.now(),runId:null};
 if(!ui.messages.length)ui.messages=[welcome];
 
 function persist(){try{if(sessionStorage.getItem(CHAT_SWITCH_KEY)||sessionStorage.getItem(RETRY_PENDING_KEY))return}catch{}ui=saveUiState(localStorage,ui)}
@@ -176,7 +176,7 @@ function hideResume(){$('#resumeBar').hidden=true}
 function capabilityMessage(){
   if(mode==='browser'){
     const support=browserRepoSupport(navigator);
-    return support.supported?'<strong>Zero-install browser execution</strong>Public Node/JS/TS repos run in an isolated WebContainer with real files, package commands, tests, bounded edits, patch output, and re-verification. No user API key or local install. Anonymous mode does not push to GitHub.':`<strong>Browser execution compatibility</strong>${support.reason} Normal no-key chat still works here.`;
+    return support.supported?`<strong>Zero-install browser execution${support.mobileBeta?' · mobile beta':''}</strong>Public Node/JS/TS repos run in an isolated WebContainer with real files, package commands, tests, bounded edits, patch output, and re-verification. Mobile runs may hit device memory limits. No user API key or local install. Anonymous mode does not push to GitHub.`:`<strong>Browser execution compatibility</strong>${support.reason} Normal no-key chat still works here.`;
   }
   if(capabilities?.autonomous)return '';
   return '<strong>Execution host connected, reasoning host missing</strong>Start Ollama for no-key autonomous repo work, or use ChatGPT/Claude as the MCP reasoning host.';
@@ -185,7 +185,7 @@ function renderCapabilities(){
   const list=$('#capabilityList');list.innerHTML='';
   const c=capabilities?.capabilities||{},support=browserRepoSupport(navigator);
   const items=mode==='browser'?
-    [['On-device chat',true,isConstrainedDevice(navigator)?'mobile-safe':'local'],['XRAI knowledge',true,'local'],['Refresh recovery',true,'durable'],['Browser Node sandbox',support.supported,support.supported?'WebContainer':'desktop Chromium'],['Public repo + tests',support.supported,support.supported?'zero-install':'compatibility'],['Patch download',support.supported,'sandbox diff']]:
+    [['On-device chat',true,isConstrainedDevice(navigator)?'mobile-safe':'local'],['XRAI knowledge',true,'local'],['Refresh recovery',true,'durable'],['Browser Node sandbox',support.supported,support.supported?(support.mobileBeta?'mobile beta':'WebContainer'):'compatibility'],['Public repo + tests',support.supported,support.supported?'zero-install':'compatibility'],['Patch download',support.supported,'sandbox diff']]:
     [['Reasoning host',Boolean(capabilities?.autonomous),capabilities?.provider||'none'],['Filesystem + shell',Boolean(c.shell),'local'],['Repo + test execution',Boolean(c.repoExecution),'local'],['Refresh recovery',Boolean(c.runPersistence),'server'],['MCP endpoint',Boolean(c.mcp),'ready']];
   for(const [label,ok,note] of items){const li=document.createElement('li');const dot=document.createElement('i');dot.className=ok?'yes':'no';const text=document.createElement('span');text.textContent=label;const em=document.createElement('em');em.textContent=note;li.append(dot,text,em);list.append(li)}
 }
@@ -205,7 +205,7 @@ async function detectRuntime(){
   $('#health').textContent=mode==='server'?(capabilities.autonomous?`${capabilities.provider} online`:'execution host'):(support.supported?'browser · chat + repo sandbox':'browser · chat');
   $('#modeLabel').textContent=mode==='server'?capabilities.provider:'browser';
   const notice=capabilityMessage();$('#capabilityNotice').innerHTML=notice;$('#capabilityNotice').hidden=!notice;
-  $('#chatModeHint').textContent=mode==='server'?'Local execution host connected.':'No-key browser chat. Public Node/JS/TS repo tasks execute in-browser on compatible desktop Chromium.';
+  $('#chatModeHint').textContent=mode==='server'?'Local execution host connected.':'No-key browser chat. Public Node/JS/TS repo tasks execute in-browser on supported modern browsers; mobile support is beta and memory-limited.';
   renderCapabilities();renderSkills();
   if(ui.runStatus==='interrupted'&&ui.activeRunId){if(mode==='server'){showResume('A previous run may still be active on the local host.');pollServerRun(ui.activeRunId)}else showResume('The previous local-host run was interrupted. Reconnect the host to recover it.')}
 }

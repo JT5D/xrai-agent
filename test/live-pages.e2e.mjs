@@ -6,12 +6,13 @@ const rawBase=process.argv[2]||process.env.XRAI_LIVE_URL||'https://jt5d.github.i
 const flow=process.argv[3]||process.env.XRAI_E2E_FLOW||'smoke';
 const base=rawBase.replace(/^http:/,'https:').replace(/\/?$/,'/');
 const artifacts='artifacts';
-const FLOW_DEADLINES={smoke:60_000,web:45_000,'chat-retry':60_000,'mobile-chat':60_000,'model-runtime':90_000,repo:360_000};
+const FLOW_DEADLINES={smoke:60_000,web:45_000,'chat-retry':60_000,'mobile-chat':60_000,'mobile-repo':360_000,'model-runtime':90_000,repo:360_000};
 const flowDeadline=FLOW_DEADLINES[flow]||180_000;
 const mobileChat=flow==='mobile-chat';
+const mobileRepo=flow==='mobile-repo';
 const deterministicChatModel=flow==='chat-retry'||mobileChat;
 const softwareWebGpu=flow==='model-runtime';
-const headed=flow==='repo'||softwareWebGpu;
+const headed=flow==='repo'||mobileRepo||softwareWebGpu;
 const launchArgs=softwareWebGpu?[
   '--enable-unsafe-webgpu',
   '--enable-unsafe-swiftshader',
@@ -152,6 +153,16 @@ async function runMobileChat(){
   checkpoint('mobile-chat:done');
 }
 
+async function runMobileRepo(){
+  checkpoint('mobile-repo:start');
+  await runRepo();
+  require(await page.locator('.mode-dock').isHidden(),'desktop runtime dock is visible on mobile');
+  const support=await page.locator('#capabilityList').innerText();
+  require(/Browser Node sandbox[\s\S]*mobile beta/i.test(support),'mobile WebContainer capability was not enabled');
+  report.flows.mobileRepo={ok:true,...report.flows.repo};
+  checkpoint('mobile-repo:done');
+}
+
 async function runModelRuntime(){
   checkpoint('model-runtime:start');
   const task='Reply with OK.';
@@ -216,7 +227,7 @@ async function runRepo(){
 try{
   checkpoint('browser:launch');
   browser=await chromium.launch({channel:'chrome',headless:!headed,args:launchArgs});
-  const context=await browser.newContext(mobileChat?{viewport:{width:390,height:844},userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'}:{viewport:{width:1440,height:1000}});
+  const context=await browser.newContext(mobileChat||mobileRepo?{viewport:{width:390,height:844},userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'}:{viewport:{width:1440,height:1000}});
   page=await context.newPage();
   page.setDefaultTimeout(5000);
   page.setDefaultNavigationTimeout(60_000);
@@ -257,6 +268,7 @@ try{
 
   if(flow==='chat-retry')await runChatRetry();
   else if(flow==='mobile-chat')await runMobileChat();
+  else if(flow==='mobile-repo')await runMobileRepo();
   else if(flow==='model-runtime')await runModelRuntime();
   else if(flow==='web')await runWeb();
   else if(flow==='repo')await runRepo();
