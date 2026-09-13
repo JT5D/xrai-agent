@@ -40,19 +40,26 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-      - name: Verify deployed version
+      - name: Verify deployed browser runtime
         shell: bash
         run: |
           expected=$(sed -n 's/.*<dt>Version<\/dt><dd>\([^<]*\)<\/dd>.*/\1/p' _site/index.html | head -1)
           test -n "$expected"
-          url="${{ steps.deployment.outputs.page_url }}?sha=${GITHUB_SHA}"
+          base="${{ steps.deployment.outputs.page_url }}"
+          index_url="${base}?sha=${GITHUB_SHA}"
+          app_url="${base}app.js?sha=${GITHUB_SHA}"
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
-            html=$(curl -fsSL -H 'Cache-Control: no-cache' "$url" || true)
-            if printf '%s' "$html" | grep -Fq "<div><dt>Version</dt><dd>${expected}</dd></div>"; then
-              echo "Verified live XRAI Agent ${expected} at ${{ steps.deployment.outputs.page_url }}"
+            html=$(curl -fsSL -H 'Cache-Control: no-cache' "$index_url" || true)
+            app=$(curl -fsSL -H 'Cache-Control: no-cache' "$app_url" || true)
+            if printf '%s' "$html" | grep -Fq "<div><dt>Version</dt><dd>${expected}</dd></div>" \
+              && printf '%s' "$html" | grep -Fq "./app.js?v=${expected}" \
+              && printf '%s' "$html" | grep -Fq "./browser-enhancements.js?v=${expected}" \
+              && printf '%s' "$app" | grep -Fq 'runBrowserRepoTask' \
+              && printf '%s' "$app" | grep -Fq 'taskNeedsExecutionHost'; then
+              echo "Verified live XRAI Agent ${expected} browser runtime at ${base}"
               exit 0
             fi
             sleep 3
           done
-          echo "Expected live version ${expected}, but GitHub Pages did not serve it after deployment." >&2
+          echo "Live Pages runtime did not match the deployed XRAI browser bundle for ${expected}." >&2
           exit 1
