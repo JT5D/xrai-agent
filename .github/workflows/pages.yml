@@ -6,6 +6,7 @@ on:
     paths:
       - 'web/**'
       - 'knowledge/**'
+      - 'test/live-pages.e2e.mjs'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -24,7 +25,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
@@ -70,9 +71,28 @@ jobs:
               && ! printf '%s' "$enhancements" | grep -Fq 'setInterval' \
               && printf '%s' "$state" | grep -Fq 'MAX_UI_STATE_CHARS'; then
               echo "Verified live XRAI Agent ${expected} browser runtime and stability guards at ${base}"
-              exit 0
+              break
+            fi
+            if [ "$attempt" = 10 ]; then
+              echo "Live Pages runtime did not match the deployed XRAI browser bundle for ${expected}." >&2
+              exit 1
             fi
             sleep 3
           done
-          echo "Live Pages runtime did not match the deployed XRAI browser bundle for ${expected}." >&2
-          exit 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Chromium E2E runner
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Exercise live user critical path
+        run: node test/live-pages.e2e.mjs "${{ steps.deployment.outputs.page_url }}"
+      - name: Upload live E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-pages-e2e
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
