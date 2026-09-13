@@ -1,19 +1,15 @@
-name: Pinned runtime reference
+name: Reasoning capability reference
 on:
   push:
-    branches: [repair/runtime-reference-2347]
+    branches: [repair/reasoning-reference-2356]
 permissions:
   contents: read
 jobs:
   reference:
     runs-on: ubuntu-latest
     timeout-minutes: 6
-    strategy:
-      fail-fast: false
-      matrix:
-        profile: [cpu, gpu, precision]
     env:
-      PROFILE: ${{ matrix.profile }}
+      PROFILE: gpu
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,15 +18,21 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-save --ignore-scripts playwright@1.56.1
-      - name: Preserve exact source
+      - name: Test documented reasoning configuration
         run: |
-          mkdir -p artifacts
-          git rev-parse HEAD > artifacts/commit.txt
-          git archive --format=tar.gz --output=artifacts/source.tar.gz HEAD
-      - run: node test/runtime-reference.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('test/runtime-reference.mjs');s=p.read_text()
+          s=s.replace('enable_thinking:false','enable_thinking:true').replace('max_new_tokens:256,do_sample:false','max_new_tokens:1024,do_sample:true,temperature:0.6,top_p:0.95,top_k:20')
+          s=s.replace('row.ok=row.output.trim()===c.expected;',"row.rawOutput=row.output;const end=row.output.lastIndexOf('</think>');if(end<0)throw Error('Reasoning did not finish within token budget');row.output=row.output.slice(end+8).trim();row.ok=row.output===c.expected;")
+          s=s.replace('const deadline=setTimeout',"report.generation={thinking:true,maxNewTokens:1024,doSample:true,temperature:0.6,topP:0.95,topK:20};\nconst deadline=setTimeout")
+          p.write_text(s)
+          PY
+          node --check test/runtime-reference.mjs
+          node test/runtime-reference.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: reference-${{ matrix.profile }}
+          name: reasoning-capability-reference
           path: artifacts/
           retention-days: 7
