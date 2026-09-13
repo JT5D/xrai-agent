@@ -45,7 +45,7 @@ test('exact bad capability prompt executes a grounded capability answer rather t
 test('self-improvement proof requests are evidence-only and cannot invent improvements',async()=>{
   const task='show me proof that self improvement happened; list 3 improvements';
   assert.equal(classifyBuiltinTask(task),'self-improvement-proof');
-  const storage={getItem:()=>JSON.stringify({events:[
+  const storage={getItem:()=>JSON.stringify({version:4,events:[
     {type:'improvement:accept',summary:'Retry improved verified score',data:{baseline:.82,candidate:.91,delta:.09,verifier:'trace-aware evaluator'}},
     {type:'skill:promoted',summary:'Promoted safer verifier skill',data:{id:'skill-x',version:2,baseline:.88,candidateScore:.94,verified:true}}
   ]})};
@@ -62,7 +62,7 @@ test('real self-improvement action requests are not intercepted by the proof rou
 });
 
 test('self-improvement proof fails closed to zero when no retained evidence exists',async()=>{
-  const result=await runBuiltinTask('show me proof of self improvement',{storage:{getItem:()=>JSON.stringify({events:[]})}});
+  const result=await runBuiltinTask('show me proof of self improvement',{storage:{getItem:()=>JSON.stringify({version:4,events:[]})}});
   assert.match(result.output,/^0 verified improvements/i);assert.match(result.output,/will not invent improvements/i);
 });
 
