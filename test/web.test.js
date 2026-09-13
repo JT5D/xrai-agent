@@ -39,9 +39,11 @@ test('public composer stays inert until app initialization owns form submission'
   assert.match(app,/\$\('#runButton'\)\.disabled=ui\.runStatus==='running'/);
 });
 
-test('browser run state yields before heavyweight execution starts',async()=>{
+test('browser run state crosses a paint boundary before heavyweight execution starts',async()=>{
   const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
-  assert.match(app,/acceptEvent\(startEvent\);ui\.activeRunId=startEvent\.runId;persist\(\);await sleep\(0\);/);
+  assert.match(app,/const yieldToBrowser=.*requestAnimationFrame/);
+  assert.match(app,/requestAnimationFrame\(\(\)=>setTimeout\(resolve,0\)\)/);
+  assert.match(app,/acceptEvent\(startEvent\);ui\.activeRunId=startEvent\.runId;persist\(\);await yieldToBrowser\(\);/);
   assert.match(app,/try\{if\(mode==='server'\)await runServer\(cleaned\);else await runBrowser\(cleaned\)\}/);
 });
 
