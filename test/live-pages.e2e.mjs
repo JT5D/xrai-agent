@@ -8,9 +8,10 @@ const base=rawBase.replace(/^http:/,'https:').replace(/\/?$/,'/');
 const artifacts='artifacts';
 const FLOW_DEADLINES={smoke:60_000,web:45_000,'chat-retry':180_000,repo:360_000};
 const flowDeadline=FLOW_DEADLINES[flow]||180_000;
+const headed=flow==='repo';
 await fs.mkdir(artifacts,{recursive:true});
 const reportPath=`${artifacts}/live-e2e-${flow}.json`;
-const report={base,flow,startedAt:new Date().toISOString(),phase:'starting',flows:{},consoleErrors:[],pageErrors:[],submitProbes:[],navigations:[],networkEvents:[],flowDeadlineMs:flowDeadline,lastHeartbeat:null};
+const report={base,flow,browserMode:headed?'headed-xvfb':'headless',startedAt:new Date().toISOString(),phase:'starting',flows:{},consoleErrors:[],pageErrors:[],submitProbes:[],navigations:[],networkEvents:[],flowDeadlineMs:flowDeadline,lastHeartbeat:null};
 let browser;
 let page;
 let finished=false;
@@ -160,7 +161,7 @@ async function runRepo(){
 
 try{
   checkpoint('browser:launch');
-  browser=await chromium.launch({channel:'chrome',headless:true});
+  browser=await chromium.launch({channel:'chrome',headless:!headed});
   const context=await browser.newContext({viewport:{width:1440,height:1000}});
   page=await context.newPage();
   page.setDefaultTimeout(5000);
