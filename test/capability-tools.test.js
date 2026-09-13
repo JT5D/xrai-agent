@@ -42,8 +42,8 @@ test('exact bad capability prompt executes a grounded capability answer rather t
   assert.ok(events.some(e=>e.type==='tool:done'&&e.name==='web_search'));
 });
 
-test('exact self-improvement proof prompt is evidence-only and cannot invent improvements',async()=>{
-  const task='prove self improvement is happening by making 3 improvements now';
+test('self-improvement proof requests are evidence-only and cannot invent improvements',async()=>{
+  const task='show me proof that self improvement happened; list 3 improvements';
   assert.equal(classifyBuiltinTask(task),'self-improvement-proof');
   const storage={getItem:()=>JSON.stringify({events:[
     {type:'improvement:accept',summary:'Retry improved verified score',data:{baseline:.82,candidate:.91,delta:.09,verifier:'trace-aware evaluator'}},
@@ -56,8 +56,13 @@ test('exact self-improvement proof prompt is evidence-only and cannot invent imp
   assert.ok(events.some(e=>e.name==='improvement_evidence'&&e.data?.count===2));
 });
 
+test('real self-improvement action requests are not intercepted by the proof router',()=>{
+  assert.equal(classifyBuiltinTask('prove self improvement is happening by making 3 improvements now'),null);
+  assert.equal(classifyBuiltinTask('improve yourself now and verify the changes'),null);
+});
+
 test('self-improvement proof fails closed to zero when no retained evidence exists',async()=>{
-  const result=await runBuiltinTask('prove self improvement is happening by making 3 improvements now',{storage:{getItem:()=>JSON.stringify({events:[]})}});
+  const result=await runBuiltinTask('show me proof of self improvement',{storage:{getItem:()=>JSON.stringify({events:[]})}});
   assert.match(result.output,/^0 verified improvements/i);assert.match(result.output,/will not invent improvements/i);
 });
 
