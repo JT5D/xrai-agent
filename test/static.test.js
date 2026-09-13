@@ -7,8 +7,8 @@ import { formatVerifiedImprovementReport,requestedImprovementCount,shouldGuardIm
 test('static Pages build has no-key local inference and evidence-gated skill learning',async()=>{
   const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
   const local=await fs.readFile(new URL('../web/local-agent.js',import.meta.url),'utf8');
-  const html=await fs.readFile(new URL('../web/index.html',import.meta.url),'utf8');
-  assert.match(app,/runLocalTask/);assert.match(local,/LanguageModel/);assert.match(local,/LFM2\.5-350M-ONNX/);assert.match(local,/SmolLM2-135M-Instruct-ONNX-MHA/);assert.match(local,/xrai-skills-v2/);assert.match(local,/supportNeeded/);assert.match(local,/minVersionGain/);assert.match(local,/pathScore/);assert.match(local,/improvement:stop/);assert.match(local,/parsePlannerDecision/);assert.match(local,/orchestration:decision/);assert.match(html,/\.\/app\.js/);assert.doesNotMatch(html,/src="\/app\.js"/);
+  const bootstrap=await fs.readFile(new URL('../web/coi-bootstrap.js',import.meta.url),'utf8');
+  assert.match(app,/runLocalTask/);assert.match(local,/LanguageModel/);assert.match(local,/LFM2\.5-350M-ONNX/);assert.match(local,/SmolLM2-135M-Instruct-ONNX-MHA/);assert.match(local,/xrai-skills-v2/);assert.match(local,/supportNeeded/);assert.match(local,/minVersionGain/);assert.match(local,/pathScore/);assert.match(local,/improvement:stop/);assert.match(local,/parsePlannerDecision/);assert.match(local,/orchestration:decision/);assert.match(bootstrap,/app\.js/);assert.match(bootstrap,/browser-enhancements\.js/);
 });
 
 test('browser evaluator parse failure is fail-closed and cannot promote learning',()=>{
@@ -55,12 +55,16 @@ test('public build links the canonical public XRAI Agent repository',async()=>{
   assert.doesNotMatch(readme,/JT5D\/unrepo/);
 });
 
-test('public browser version and cache-busted runtime assets stay synchronized',async()=>{
+test('public browser version and gated runtime bootstrap stay synchronized',async()=>{
   const html=await fs.readFile(new URL('../web/index.html',import.meta.url),'utf8');
+  const bootstrap=await fs.readFile(new URL('../web/coi-bootstrap.js',import.meta.url),'utf8');
   const pkg=JSON.parse(await fs.readFile(new URL('../package.json',import.meta.url),'utf8'));
   const version=String(pkg.version).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
   assert.match(html,new RegExp(`<dt>Version<\\/dt><dd>${version}<\\/dd>`));
-  for(const asset of ['coi-bootstrap.js','static-runtime.js','input-guard.js','browser-enhancements.js','event-inspector.js','policy-inspector.js','improvement-guard.js','app.js'])assert.match(html,new RegExp(`${asset.replace('.','\\.')}\\?v=${version}`));
+  for(const asset of ['coi-bootstrap.js','static-runtime.js'])assert.match(html,new RegExp(`${asset.replace('.','\\.')}\\?v=${version}`));
+  assert.doesNotMatch(html,/type="module"/);
+  for(const asset of ['input-guard.js','browser-enhancements.js','event-inspector.js','policy-inspector.js','improvement-guard.js','app.js'])assert.match(bootstrap,new RegExp(asset.replace('.','\\.')));
+  assert.match(bootstrap,/registration\.update/);assert.match(bootstrap,/waitForActivation/);assert.match(bootstrap,/loadModules/);
 });
 
 test('public graph ships exact provenance binding plus interactive X-ray inspection',async()=>{
@@ -75,16 +79,14 @@ test('public graph ships exact provenance binding plus interactive X-ray inspect
   assert.match(html,/X-ray View/);assert.match(html,/God's-eye view/);assert.match(history,/Time Travel/);
 });
 
-test('browser enhancement layer has no perpetual polling or duplicate raw UI parser',async()=>{
+test('browser guards use bounded state and scoped observers without perpetual polling',async()=>{
   const history=await fs.readFile(new URL('../web/browser-enhancements.js',import.meta.url),'utf8');
-  assert.doesNotMatch(history,/setInterval/);
-  assert.doesNotMatch(history,/JSON\.parse\(localStorage\.getItem/);
-  assert.match(history,/loadUiState/);
-  assert.match(history,/saveUiState/);
-  assert.match(history,/requestIdleCallback/);
-  assert.match(history,/visibilitychange/);
-  assert.match(history,/MutationObserver/);
-  assert.match(history,/#messages \.msg\.agent \.bubble p/);
+  const input=await fs.readFile(new URL('../web/input-guard.js',import.meta.url),'utf8');
+  const improvement=await fs.readFile(new URL('../web/improvement-guard.js',import.meta.url),'utf8');
+  const capabilities=await fs.readFile(new URL('../web/capability-tools.js',import.meta.url),'utf8');
+  assert.doesNotMatch(history,/setInterval/);assert.doesNotMatch(history,/JSON\.parse\(localStorage\.getItem/);assert.match(history,/loadUiState/);assert.match(history,/saveUiState/);assert.match(history,/requestIdleCallback/);assert.match(history,/visibilitychange/);assert.match(history,/MutationObserver/);
+  assert.match(input,/loadUiState/);assert.match(input,/MAX_UI_STATE_CHARS/);assert.match(capabilities,/loadUiState/);
+  assert.match(improvement,/loadUiState/);assert.match(improvement,/saveUiState/);assert.match(improvement,/querySelector\('#messages'\)/);assert.doesNotMatch(improvement,/document\.documentElement/);assert.doesNotMatch(improvement,/characterData:true/);
 });
 
 test('public browser has integrated zero-install repo execution',async()=>{
