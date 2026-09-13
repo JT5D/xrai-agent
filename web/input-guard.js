@@ -1,5 +1,7 @@
+import { MAX_UI_STATE_CHARS,UI_STATE_KEY,loadUiState,saveUiState } from './state.js';
+
 const LEGACY_UI_KEY='xrai-ui-v3';
-const CURRENT_UI_KEY='xrai-ui-v4';
+const CURRENT_UI_KEY=UI_STATE_KEY;
 const DEFAULT_REPO='JT5D/xrai-agent';
 const CONTEXT_MARKER='\n\nPrevious XRAI context';
 
@@ -48,19 +50,21 @@ export function stateLooksStale(value){
 
 export function purgeStaleUiState(storage=globalThis.localStorage){
   let removed=false;
-  for(const key of [CURRENT_UI_KEY,LEGACY_UI_KEY]){
-    try{
-      const raw=storage?.getItem(key);if(!raw)continue;
-      if(stateLooksStale(JSON.parse(raw))){storage.removeItem(key);removed=true}
-    }catch{}
-  }
+  try{
+    const raw=storage?.getItem(CURRENT_UI_KEY)||'';
+    if(raw&&raw.length<=MAX_UI_STATE_CHARS&&stateLooksStale(loadUiState(storage))){storage.removeItem(CURRENT_UI_KEY);removed=true}
+  }catch{}
+  try{
+    const raw=storage?.getItem(LEGACY_UI_KEY)||'';
+    if(raw&&raw.length<=MAX_UI_STATE_CHARS&&stateLooksStale(JSON.parse(raw))){storage.removeItem(LEGACY_UI_KEY);removed=true}
+  }catch{}
   return removed;
 }
 
 export function migrateLegacyUiState(storage=globalThis.localStorage){
   try{
     if(storage?.getItem(CURRENT_UI_KEY))return false;
-    const raw=storage?.getItem(LEGACY_UI_KEY);if(!raw)return false;
+    const raw=storage?.getItem(LEGACY_UI_KEY);if(!raw||raw.length>MAX_UI_STATE_CHARS)return false;
     const parsed=JSON.parse(raw);
     if(stateLooksStale(parsed)){storage.removeItem(LEGACY_UI_KEY);return true}
   }catch{}
@@ -69,14 +73,14 @@ export function migrateLegacyUiState(storage=globalThis.localStorage){
 
 export function repairLeakedContextState(storage=globalThis.localStorage){
   try{
-    const raw=storage?.getItem(CURRENT_UI_KEY);if(!raw)return false;
-    const state=JSON.parse(raw);if(!state||typeof state!=='object')return false;
+    const raw=storage?.getItem(CURRENT_UI_KEY)||'';if(!raw||raw.length>MAX_UI_STATE_CHARS)return false;
+    const state=loadUiState(storage);if(!state||typeof state!=='object')return false;
     const leaked=String(state.lastTask||'').includes(CONTEXT_MARKER)||(Array.isArray(state.messages)&&state.messages.some(m=>String(m?.text||'').includes(CONTEXT_MARKER)));
     if(!leaked)return false;
     const prior=lastMeaningfulUserTask(state);
     if(Array.isArray(state.messages))state.messages=state.messages.map(m=>m?.role==='user'?{...m,text:visibleTask(m.text)}:m);
     state.lastTask=prior||visibleTask(state.lastTask||'');
-    state.updatedAt=Date.now();storage.setItem(CURRENT_UI_KEY,JSON.stringify(state));return true;
+    saveUiState(storage,state);return true;
   }catch{return false}
 }
 
@@ -84,7 +88,7 @@ export function contextualizeFollowup(task,storage=globalThis.localStorage){
   const clean=visibleTask(task);
   if(!isContextualFollowup(clean))return clean;
   try{
-    const state=JSON.parse(storage?.getItem(CURRENT_UI_KEY)||'null');
+    const state=loadUiState(storage);
     const priorTask=lastMeaningfulUserTask(state);
     const priorResult=String(state?.result?.output||'').trim();
     if(!priorTask&&!priorResult)return clean;
