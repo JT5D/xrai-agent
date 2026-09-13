@@ -1,4 +1,4 @@
-# XRAI Agent v0.3.49
+# XRAI Agent v0.3.50
 
 Small, transparent recursive AI agent with **grounded runtime capabilities**, **no-key web research**, zero-install browser repo execution, and evidence-gated skill evolution.
 
@@ -170,3 +170,7 @@ https://github.com/JT5D/xrai/tree/main/knowledge
 ```
 
 MIT licensed.
+
+## Runtime status evidence
+
+Ask "are we fixed & working now?" to inspect recorded command receipts and live deployment checks for the exact build. This read-only tool does not call a language model, run tests, or invent repairs. Failed, cancelled, missing, or stale checks remain unverified. Status questions preserve the prior task.

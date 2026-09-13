@@ -1,3 +1,4 @@
+import { isRuntimeStatusQuestion,inspectRuntimeStatus } from './runtime-status.js';
 import { verifiedImprovementsForRun,formatVerifiedImprovementReport } from './improvement-guard.js';
 import { loadUiState } from './state.js';
 import { formatWebResults,searchWeb } from './web-search.js';
@@ -16,6 +17,7 @@ export const CAPABILITIES=[
   ['No-key web research','Federated live search across no-key public sources with parallel fallbacks and source URLs.'],
   ['XRAI knowledge retrieval','Uses the bundled XRAI knowledgebase plus promoted evidence-gated skills.'],
   ['Public repo execution','Imports public Node/JS/TS repos into an isolated WebContainer on supported modern browsers; mobile support is beta and memory-limited.'],
+  ['Runtime status evidence','Reads recorded command receipts and live checks for the exact deployed build; never guesses from model confidence.'],
   ['Real verification','Runs actual package test/check/lint/build commands and trusts exit codes over model confidence.'],
   ['Bounded repair + patch','Makes constrained sandbox edits, re-verifies, and produces a downloadable patch.'],
   ['Visible orchestration','Shows observable agents, tools, retrieval, verification, retries, and learning events.'],
@@ -26,6 +28,7 @@ export const CAPABILITIES=[
 
 export function classifyBuiltinTask(task=''){
   const text=String(task).split(CONTEXT_MARKER,1)[0].trim();
+  if(isRuntimeStatusQuestion(text))return 'runtime-status';
   if((SELF_IMPROVE_PROOF_RE.test(text)||/^(?:did|have|has|were|are)\b[\s\S]*\bself[- ]?improvements?\b/i.test(text))&&!SELF_IMPROVE_ACTION_RE.test(text))return'self-improvement-proof';
   const asksCapabilities=CAPABILITY_RE.test(text),asksWeb=WEB_RE.test(text),asksAddWeb=ADD_WEB_RE.test(text);
   const needsFresh=FRESH_RE.test(text)&&/\b(find|search|research|news|status|version|release|best|popular|state of the art|repo|github)\b/i.test(text);
@@ -64,6 +67,14 @@ export async function runBuiltinTask(task,{emit=()=>{},progress=()=>{},fetchFn=g
   const runId=globalThis.crypto?.randomUUID?.()||`xrai-${Date.now().toString(36)}`;
   const event=(type,summary,meta={})=>emit({id:globalThis.crypto?.randomUUID?.()||`${runId}-${Math.random()}`,runId,ts:new Date().toISOString(),type,summary,...meta});
   event('run:start',task,{data:{provider:'browser-tools'}});
+  if(kind==='runtime-status'){
+    progress('Inspecting recorded execution and deployment checks...');
+    event('tool:start','Read runtime verification evidence',{name:'runtime_status'});
+    const result=await inspectRuntimeStatus({state:loadUiState(storage),fetchFn});
+    event('tool:done',result.output.slice(0,2000),{name:'runtime_status',data:{status:result.status}});
+    event('run:done','Runtime evidence inspected; no new tests or edits',{data:{provider:'runtime-evidence',score:null}});
+    return {...result,runId};
+  }
   if(kind==='self-improvement-proof'){
     const output=improvementProofText(task,storage);const count=(output.match(/^\d+/)||['0'])[0];event('tool:done',`${count} verified sandbox patch records found`,{name:'improvement_evidence',data:{count:Number(count)}});event('run:done',output.slice(0,1200),{data:{score:1,attempts:1,provider:'browser-tools',learning:'evidence-only'}});return{runId,output,score:1,attempts:1,provider:'browser-tools',learning:{status:'evidence-only'}};
   }
