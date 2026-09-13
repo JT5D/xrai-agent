@@ -48,16 +48,28 @@ jobs:
           base="${{ steps.deployment.outputs.page_url }}"
           base="${base/http:/https:}"
           index_url="${base}?sha=${GITHUB_SHA}"
-          app_url="${base}app.js?sha=${GITHUB_SHA}"
+          bootstrap_url="${base}coi-bootstrap.js?v=${expected}&sha=${GITHUB_SHA}"
+          app_url="${base}app.js?v=${expected}&sha=${GITHUB_SHA}"
+          enhancements_url="${base}browser-enhancements.js?v=${expected}&sha=${GITHUB_SHA}"
+          state_url="${base}state.js?v=${expected}&sha=${GITHUB_SHA}"
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
             html=$(curl -fsSL -H 'Cache-Control: no-cache' "$index_url" || true)
+            bootstrap=$(curl -fsSL -H 'Cache-Control: no-cache' "$bootstrap_url" || true)
             app=$(curl -fsSL -H 'Cache-Control: no-cache' "$app_url" || true)
+            enhancements=$(curl -fsSL -H 'Cache-Control: no-cache' "$enhancements_url" || true)
+            state=$(curl -fsSL -H 'Cache-Control: no-cache' "$state_url" || true)
             if printf '%s' "$html" | grep -Fq "<div><dt>Version</dt><dd>${expected}</dd></div>" \
-              && printf '%s' "$html" | grep -Fq "./app.js?v=${expected}" \
-              && printf '%s' "$html" | grep -Fq "./browser-enhancements.js?v=${expected}" \
+              && printf '%s' "$html" | grep -Fq "./coi-bootstrap.js?v=${expected}" \
+              && ! printf '%s' "$html" | grep -Fq 'type="module"' \
+              && printf '%s' "$bootstrap" | grep -Fq "browser-enhancements.js" \
+              && printf '%s' "$bootstrap" | grep -Fq "app.js" \
+              && printf '%s' "$bootstrap" | grep -Fq "updateViaCache:'none'" \
               && printf '%s' "$app" | grep -Fq 'runBrowserRepoTask' \
-              && printf '%s' "$app" | grep -Fq 'taskNeedsExecutionHost'; then
-              echo "Verified live XRAI Agent ${expected} browser runtime at ${base}"
+              && printf '%s' "$app" | grep -Fq 'taskNeedsExecutionHost' \
+              && printf '%s' "$enhancements" | grep -Fq 'loadUiState' \
+              && ! printf '%s' "$enhancements" | grep -Fq 'setInterval' \
+              && printf '%s' "$state" | grep -Fq 'MAX_UI_STATE_CHARS'; then
+              echo "Verified live XRAI Agent ${expected} browser runtime and stability guards at ${base}"
               exit 0
             fi
             sleep 3
