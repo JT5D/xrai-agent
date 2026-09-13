@@ -5,6 +5,7 @@ import { browserRepoSupport,runBrowserRepoTask } from './browser-workspace.js';
 const $=s=>document.querySelector(s);
 const $$=s=>[...document.querySelectorAll(s)];
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const yieldToBrowser=()=>new Promise(resolve=>{if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>setTimeout(resolve,0));else setTimeout(resolve,16)});
 const uid=()=>globalThis.crypto?.randomUUID?.()||`xrai-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
 let ui=loadUiState(localStorage);
 try{if(sessionStorage.getItem(CHAT_SWITCH_KEY))sessionStorage.removeItem(CHAT_SWITCH_KEY)}catch{}
@@ -229,7 +230,7 @@ async function run(task,{resume=false}={}){
   const cleaned=String(task||'').trim();if(!cleaned)return;
   hideResume();ui.lastTask=cleaned;ui.result=null;ui.events=[];ui.activeRunId=null;
   if(!resume)addMessage('user',cleaned,{runId:null,persistMessage:false});persist();setRunStatus('running','starting');
-  const startEvent=makeEvent('run:start',cleaned,{data:{mode}});acceptEvent(startEvent);ui.activeRunId=startEvent.runId;persist();await sleep(0);
+  const startEvent=makeEvent('run:start',cleaned,{data:{mode}});acceptEvent(startEvent);ui.activeRunId=startEvent.runId;persist();await yieldToBrowser();
   try{if(mode==='server')await runServer(cleaned);else await runBrowser(cleaned)}catch(error){const message=error instanceof Error?error.message:String(error);setRunStatus('error',message);addMessage('agent',`Run failed: ${message}`);acceptEvent(makeEvent('run:done',`Run failed: ${message}`,{data:{score:0,attempts:0,learning:'none'}}))}
 }
 function resumeRecovered(){hideResume();if(!ui.lastTask)return;setRunStatus('idle','ready to resume');run(ui.lastTask,{resume:true})}
