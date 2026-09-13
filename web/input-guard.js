@@ -76,7 +76,12 @@ export function contextualizeFollowup(task,storage=globalThis.localStorage){
   }catch{return clean}
 }
 
-if(typeof window!=='undefined'){
+if(typeof window!=='undefined'&&typeof document!=='undefined'){
   purgeStaleUiState(window.localStorage);
   migrateLegacyUiState(window.localStorage);
+  document.addEventListener('submit',event=>{
+    const form=event.target;if(!(form instanceof HTMLFormElement)||form.id!=='chatForm')return;
+    const input=form.querySelector('#task');if(!(input instanceof HTMLTextAreaElement))return;
+    input.value=contextualizeFollowup(input.value,window.localStorage);
+  },true);
 }
