@@ -32,7 +32,7 @@ export function formatVerifiedImprovementReport(records,requested){
 }
 
 export function requestedImprovementCount(text=''){
-  const m=String(text).match(/\b(?:make|do|prove)[^\d]{0,30}(\d+)\s+improvements?\b/i);return m?Math.max(1,Math.min(10,Number(m[1]))):null;
+  const m=String(text).match(/\b(\d+)\s+improvements?\b/i);return m?Math.max(1,Math.min(10,Number(m[1]))):null;
 }
 
 export function shouldGuardImprovementClaim(userText='',agentText=''){return SELF_IMPROVE_RE.test(String(userText))&&CLAIM_RE.test(String(agentText))}
