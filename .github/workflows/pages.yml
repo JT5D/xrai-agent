@@ -18,7 +18,8 @@ permissions:
 
 concurrency:
   group: pages-layered-e2e-v2
-  cancel-in-progress: true
+  # Keep deployment and its live checks together; newer pushes wait their turn.
+  cancel-in-progress: false
 
 jobs:
   deploy:
