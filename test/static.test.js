@@ -48,9 +48,10 @@ test('self-improvement claims are replaced by retained structured evidence',()=>
   assert.match(formatVerifiedImprovementReport([],3),/0 verified improvements/);
 });
 
-test('browser chooses a smaller quantized model on mobile and a full model on capable desktop',()=>{
+test('browser chooses a smaller quantized model on mobile, a full model when requested, and a fast fallback',()=>{
   const mobile=selectBrowserModelProfile({userAgent:'iPhone',gpu:{}});assert.equal(mobile.constrained,true);assert.match(mobile.modelId,/135M/);assert.equal(mobile.maxNewTokens,220);
   const desktop=selectBrowserModelProfile({userAgent:'Desktop',deviceMemory:16,gpu:{}});assert.equal(desktop.constrained,false);assert.match(desktop.modelId,/350M/);assert.equal(desktop.maxNewTokens,420);
+  const fallback=selectBrowserModelProfile({userAgent:'Desktop',deviceMemory:16,gpu:{}},true);assert.equal(fallback.constrained,false);assert.match(fallback.modelId,/135M/);assert.equal(fallback.maxNewTokens,220);
 });
 
 test('public build links the canonical public XRAI Agent repository',async()=>{
