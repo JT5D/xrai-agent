@@ -1,0 +1,71 @@
+name: Validate conversation repair
+on:
+  push:
+    branches: [repair/conversation-0348]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Apply exact reviewed repair
+        run: |
+          if [ -f .repair.json ]; then
+            python3 - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          for entry in json.loads(Path('.repair.json').read_text()):
+              p=Path(entry['path'])
+              if 'text' in entry:
+                  p.parent.mkdir(parents=True,exist_ok=True)
+                  p.write_text(entry['text'])
+              else:
+                  assert hashlib.sha256(p.read_bytes()).hexdigest()==entry['sha'],str(p)
+                  lines=p.read_text().splitlines(True)
+                  for start,end,text in reversed(entry['hunks']):
+                      lines[start:end]=[text]
+                  p.write_text(''.join(lines))
+          p=Path('package.json');data=json.loads(p.read_text());data['version']='0.3.48';p.write_text(json.dumps(data,indent=2)+'\n')
+          PY
+          fi
+      - name: Source checks
+        run: npm run check > source-checks.txt 2>&1
+      - name: Browser contract checks
+        if: always()
+        run: |
+          if [ -f test/conversation.e2e.mjs ]; then
+            npm install --no-save --ignore-scripts playwright@1.55.0
+            node test/conversation.e2e.mjs
+          fi
+      - name: Export source and evidence
+        if: always()
+        run: |
+          mkdir -p artifacts
+          cp source-checks.txt artifacts/ || true
+          tar --exclude=node_modules --exclude=.git --exclude=artifacts -czf artifacts/source.tar.gz package.json src web test knowledge .github
+      - name: Create tested commit without repair infrastructure
+        if: success()
+        run: |
+          if [ -f .repair.json ]; then
+            git config user.name JT5D
+            git config user.email jtunick@theimclab.com
+            git rm --ignore-unmatch .repair.json .github/workflows/repair-validation.yml
+            git add web test package.json .github/workflows/pages.yml
+            tree=$(git write-tree)
+            commit=$(printf '%s\n' 'Fix conversation context, serialized execution, research relevance and evidence integrity' | git commit-tree "$tree" -p 69c3440e4368820147de9ee8c53de6f92cc1fc08)
+            git push origin "$commit:refs/heads/repair/conversation-0348-tested"
+            printf '%s\n' "$commit" > artifacts/tested-commit.txt
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: conversation-repair-validation
+          path: artifacts/
+          retention-days: 7
