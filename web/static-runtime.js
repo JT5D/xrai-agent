@@ -4,6 +4,7 @@
   const flatCache=new Map(),branchCache=new Map();
   const response=value=>new Response(JSON.stringify(value),{status:200,headers:jsonHeaders});
   const splitRepo=s=>{const p=String(s).split('/');return p.length===2&&p.every(Boolean)?p:null};
+  const forceMirror=()=>{try{return localStorage.getItem('xrai-e2e-force-mirror')==='1'}catch{return false}};
   async function flat(repo,ref){
     const key=`${repo}@${ref}`;if(flatCache.has(key))return flatCache.get(key);
     const url=`https://data.jsdelivr.com/v1/package/gh/${repo}@${encodeURIComponent(ref)}/flat`,r=await nativeFetch(url,{headers:{accept:'application/json'}});
@@ -38,8 +39,12 @@
   globalThis.fetch=async(input,init)=>{
     const url=typeof input==='string'?input:input?.url||'';
     if(/(?:^|\/)api\/capabilities(?:$|[?#])/i.test(url))return new Response('{}',{status:404,headers:jsonHeaders});
+    const githubRepo=/^https:\/\/api\.github\.com\/repos\//i.test(url);
+    if(githubRepo&&forceMirror()){
+      try{return await fallbackGitHub(url)||new Response('{"message":"forced mirror unsupported"}',{status:429,headers:jsonHeaders})}catch(error){console.warn('XRAI forced public repo mirror unavailable:',error);return new Response('{"message":"forced mirror unavailable"}',{status:429,headers:jsonHeaders})}
+    }
     const r=await nativeFetch(input,init);
-    if(!/^https:\/\/api\.github\.com\/repos\//i.test(url)||![403,429].includes(r.status))return r;
+    if(!githubRepo||![403,429].includes(r.status))return r;
     try{return await fallbackGitHub(url)||r}catch(error){console.warn('XRAI public repo mirror fallback unavailable:',error);return r}
   };
 })();
