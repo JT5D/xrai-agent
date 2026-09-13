@@ -1,4 +1,4 @@
-# XRAI Agent v0.3.48
+# XRAI Agent v0.3.49
 
 Small, transparent recursive AI agent with **grounded runtime capabilities**, **no-key web research**, zero-install browser repo execution, and evidence-gated skill evolution.
 

@@ -3,7 +3,7 @@ import { CHAT_SWITCH_KEY } from './conversation-store.js';
 import { browserRepoSupport,runBrowserRepoTask } from './browser-workspace.js';
 import { isRetryFollowup,visibleTask } from './input-guard.js';
 import { classifyBuiltinTask,runBuiltinTask,isEvaluatorArtifact } from './capability-tools.js';
-import { conversationContext,isContinuation,executionIntent,contextualResearchQuery,requestsChanges } from './conversation-context.js';
+import { conversationContext,isContinuation,executionIntent,contextualResearchQuery,requestsChanges,resolvedTask } from './conversation-context.js';
 
 const $=s=>document.querySelector(s);
 const $$=s=>[...document.querySelectorAll(s)];
@@ -221,7 +221,7 @@ async function runServer(task){
 async function runBrowser(task,context,live){
   const emit=event=>{if(live())acceptEvent({...event,runId:activeSubmission.runId})};
   const progress=message=>{if(live()){$('#status').textContent=message;ui.statusText=message;persist()}};
-  const inherited=isContinuation(task)&&context.goal?context.goal:task;
+  const inherited=resolvedTask(task,context);
   const builtinKind=classifyBuiltinTask(inherited);
   const execute=executionIntent(task,context)&&!['capabilities','capabilities+web','self-improvement-proof'].includes(builtinKind);
   let research=null;
