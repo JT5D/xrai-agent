@@ -1,5 +1,3 @@
-import { normalizeUiState } from './state.js';
-
 export const CHATS_KEY='xrai-chats-v1';
 export const ACTIVE_CHAT_KEY='xrai-active-chat-v1';
 export const UI_STATE_KEY='xrai-ui-v4';
@@ -11,6 +9,18 @@ const id=()=>globalThis.crypto?.randomUUID?.()||`chat-${Date.now().toString(36)}
 const rawValue=(storage,key)=>{try{return storage?.getItem(key)||''}catch{return''}};
 const parse=(storage,key,fallback)=>{try{const raw=rawValue(storage,key);return raw?JSON.parse(raw):fallback}catch{return fallback}};
 const chatStoreOversized=storage=>rawValue(storage,CHATS_KEY).length>MAX_CHAT_STORE_CHARS;
+const trimString=(value,max)=>String(value??'').slice(0,max);
+function trimValue(value,depth=0){
+  if(value==null||typeof value==='boolean'||typeof value==='number')return value;
+  if(typeof value==='string')return trimString(value,4000);
+  if(depth>=2)return trimString(typeof value==='object'?JSON.stringify(value):value,4000);
+  if(Array.isArray(value))return value.slice(0,32).map(v=>trimValue(v,depth+1));
+  if(typeof value==='object')return Object.fromEntries(Object.entries(value).slice(0,32).map(([k,v])=>[k,trimValue(v,depth+1)]));
+  return trimString(value,4000);
+}
+function trimMessage(message={}){const out={...message};if('text'in out)out.text=trimString(out.text,12000);return out}
+function trimEvent(event={}){const out={...event};for(const [key,max] of [['summary',2000],['inputSummary',4000],['outputSummary',4000],['error',2000]])if(key in out&&out[key]!=null)out[key]=trimString(out[key],max);if('data'in out)out.data=trimValue(out.data);if('evidence'in out)out.evidence=trimValue(out.evidence);return out}
+function trimResult(result){if(!result||typeof result!=='object')return result??null;const out={...result};if('output'in out)out.output=trimString(out.output,20000);if('diff'in out)out.diff=trimString(out.diff,50000);if(Array.isArray(out.changedFiles))out.changedFiles=out.changedFiles.slice(0,100).map(v=>trimString(v,500));return out}
 const titleFor=state=>{
   const first=(state?.messages||[]).find(m=>m?.role==='user'&&String(m.text||'').trim());
   const text=String(first?.text||state?.lastTask||'New chat').replace(/\s+/g,' ').trim();
@@ -20,8 +30,7 @@ function beginTransition(transitionStorage,chatId){try{transitionStorage?.setIte
 export function isChatTransitioning(transitionStorage=globalThis.sessionStorage){try{return Boolean(transitionStorage?.getItem(CHAT_SWITCH_KEY))}catch{return false}}
 export function finishChatTransition(transitionStorage=globalThis.sessionStorage){try{transitionStorage?.removeItem(CHAT_SWITCH_KEY)}catch{}}
 export function compactState(state={}){
-  const normalized=normalizeUiState({...state,version:4});
-  return {...normalized,messages:normalized.messages.slice(-100),events:normalized.events.slice(-220),updatedAt:Date.now()};
+  return {...state,lastTask:'lastTask'in state?trimString(state.lastTask,12000):state.lastTask,statusText:'statusText'in state?trimString(state.statusText,1000):state.statusText,messages:Array.isArray(state.messages)?state.messages.slice(-100).map(trimMessage):[],events:Array.isArray(state.events)?state.events.slice(-220).map(trimEvent):[],result:trimResult(state.result),options:state.options&&typeof state.options==='object'?trimValue(state.options):state.options,updatedAt:Date.now()};
 }
 export function listChats(storage=globalThis.localStorage){
   if(chatStoreOversized(storage))return[];
