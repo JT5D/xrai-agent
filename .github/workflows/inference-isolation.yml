@@ -1,7 +1,7 @@
 name: Verify portable patch export
 on:
   push:
-    branches: [repair/inference-isolation-20260913]
+    branches: [repair/patch-export-3a7e1b18]
 permissions:
   contents: write
 jobs:
@@ -42,7 +42,7 @@ jobs:
           git config user.email jtunick@theimclab.com
           git add web/browser-workspace.js test/browser-workspace.test.js test/patch-export.e2e.mjs
           git commit -m 'Export applicable unified patches and verify browser downloads'
-          git push origin HEAD:refs/heads/repair/patch-export-tested-20260913
+          git push origin HEAD:refs/heads/repair/patch-export-tested-3a7e1b18
           git rev-parse HEAD > artifacts/tested-commit.txt
           git diff HEAD^ HEAD > artifacts/reviewed-source.diff
       - uses: actions/upload-artifact@v4
