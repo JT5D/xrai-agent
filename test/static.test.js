@@ -19,3 +19,13 @@ test('browser chooses a smaller quantized model on mobile and a full model on ca
   const mobile=selectBrowserModelProfile({userAgent:'iPhone',gpu:{}});assert.equal(mobile.constrained,true);assert.match(mobile.modelId,/135M/);assert.equal(mobile.maxNewTokens,220);
   const desktop=selectBrowserModelProfile({userAgent:'Desktop',deviceMemory:16,gpu:{}});assert.equal(desktop.constrained,false);assert.match(desktop.modelId,/350M/);assert.equal(desktop.maxNewTokens,420);
 });
+
+
+test('public build links the canonical public XRAI Agent repository',async()=>{
+  const html=await fs.readFile(new URL('../web/index.html',import.meta.url),'utf8');
+  const readme=await fs.readFile(new URL('../README.md',import.meta.url),'utf8');
+  assert.match(html,/https:\/\/github\.com\/JT5D\/xrai-agent/);
+  assert.match(readme,/git clone https:\/\/github\.com\/JT5D\/xrai-agent\.git/);
+  assert.doesNotMatch(html,/private preview repo/i);
+  assert.doesNotMatch(readme,/JT5D\/unrepo/);
+});
