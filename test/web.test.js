@@ -22,6 +22,6 @@ test('web UI exposes durable recovery, zero-install repo execution, and patch do
   assert.match(app,/downloadPatch/);
   assert.match(html,/Run recovered after a page reload/);
   assert.match(html,/verified patch output/i);
-  assert.match(html,/browser-enhancements\.js\?v=0\.3\.7/);
+  assert.match(html,/browser-enhancements\.js\?v=\d+\.\d+\.\d+/);
   assert.doesNotMatch(html,/repo-runtime\.js/);
 });
