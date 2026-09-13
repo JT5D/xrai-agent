@@ -16,7 +16,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-layered-e2e-v2
   cancel-in-progress: true
 
 jobs:
