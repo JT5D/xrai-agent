@@ -1,12 +1,13 @@
 import { classifyBuiltinTask,isEvaluatorArtifact,runBuiltinTask } from './capability-tools.js';
-import { ACTIVE_CHAT_KEY,UI_STATE_KEY,branchLineage,branchTree,compareChats,ensureActiveChat,forkChat,isChatTransitioning,listChats,newChat,restoreChat,snapshotChat,snapshotCurrentChat } from './conversation-store.js';
+import { ACTIVE_CHAT_KEY,branchLineage,branchTree,compareChats,ensureActiveChat,forkChat,isChatTransitioning,listChats,newChat,restoreChat,snapshotChat,snapshotCurrentChat } from './conversation-store.js';
 import { isRetryFollowup,lastMeaningfulUserTask,visibleTask } from './input-guard.js';
+import { loadUiState,saveUiState } from './state.js';
 
 const $=s=>document.querySelector(s);
 const uid=()=>globalThis.crypto?.randomUUID?.()||`xrai-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
 const RETRY_PENDING_KEY='xrai-retry-pending-v1';
-const readState=()=>{try{return JSON.parse(localStorage.getItem(UI_STATE_KEY)||'null')}catch{return null}};
-const writeState=state=>{try{localStorage.setItem(UI_STATE_KEY,JSON.stringify({...state,updatedAt:Date.now()}));return true}catch{return false}};
+const readState=()=>loadUiState(localStorage);
+const writeState=state=>{saveUiState(localStorage,state);return true};
 const runWhenIdle=fn=>{if(typeof requestIdleCallback==='function')requestIdleCallback(fn,{timeout:1200});else setTimeout(fn,0)};
 
 function appendMessage(state,role,text,runId=null){
@@ -14,10 +15,7 @@ function appendMessage(state,role,text,runId=null){
   rows.push({id:uid(),role,text:String(text),ts:Date.now(),runId});state.messages=rows.slice(-100);
 }
 function setBusy(text){const b=$('#runButton'),s=$('#status');if(b)b.disabled=true;if(s)s.textContent=text||'working';}
-function currentState(){
-  const s=readState();
-  return s&&typeof s==='object'?s:{version:4,view:'workspace',activeRunId:null,lastTask:'',runStatus:'idle',statusText:'ready',messages:[],events:[],result:null,options:{workspace:'.',maxDepth:2,maxChildren:2,retries:1},updatedAt:Date.now()};
-}
+function currentState(){return readState()}
 async function executeBuiltin(task){
   let state=currentState();
   state.lastTask=task;state.result=null;state.events=[];state.activeRunId=null;state.runStatus='running';state.statusText='starting built-in tool';
