@@ -40,7 +40,7 @@ export function ingestPolicyOutcomes(storage=globalThis.localStorage){
 }
 function choosePolicy(features,task,storage,maxWorkers){
   ingestPolicyOutcomes(storage);const store={...baseStore(),...read(storage,POLICY_KEY,baseStore())},incumbent=store.incumbentByBucket[features.bucket]||'adaptive-v1';
-  if(features.constrained||features.mode==='fast'||maxWorkers<=1)return{key:incumbent,experiment:false,decision:store.decisions.at(-1)||null};
+  if(!storage||features.constrained||features.mode==='fast'||maxWorkers<=1)return{key:incumbent,experiment:false,decision:store.decisions.at(-1)||null};
   const candidates=['efficient-v2','breadth-v2'].filter(k=>k!==incumbent),roll=hash(`${task}|${store.outcomes.length}`)%10,key=roll<2?candidates[roll%candidates.length]:incumbent;
   return{key,experiment:key!==incumbent,incumbent,decision:store.decisions.at(-1)||null};
 }
