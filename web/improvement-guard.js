@@ -1,10 +1,8 @@
-import { UI_STATE_KEY } from './state.js';
+import { loadUiState,saveUiState } from './state.js';
 import { normalizeEvents } from './event-model.js';
 
 const SELF_IMPROVE_RE=/\b(self[- ]?improv(?:e|ement|ing)|self[- ]?fix(?:ing)?|make\s+\d+\s+improvements?|prove\s+(?:that\s+)?self[- ]?improvement|improve\s+yourself)\b/i;
 const CLAIM_RE=/\b(?:improvements? made|improved|optimized|learned|self[- ]?improved|fixed myself|retained improvement)\b/i;
-
-const readState=storage=>{try{return JSON.parse(storage?.getItem(UI_STATE_KEY)||'null')}catch{return null}};
 const pct=n=>Number.isFinite(Number(n))?`${Math.round(Number(n)*100)}%`:null;
 
 export function verifiedImprovementsForRun(state,runId){
@@ -38,16 +36,16 @@ export function requestedImprovementCount(text=''){
 export function shouldGuardImprovementClaim(userText='',agentText=''){return SELF_IMPROVE_RE.test(String(userText))&&CLAIM_RE.test(String(agentText))}
 
 function repairLatestClaim(storage=globalThis.localStorage){
-  const state=readState(storage);if(!state?.messages?.length)return false;
+  const bubble=[...document.querySelectorAll('#messages .msg.agent .bubble p')].at(-1);if(!bubble||!CLAIM_RE.test(bubble.textContent||''))return false;
+  const state=loadUiState(storage);if(!state?.messages?.length)return false;
   const agentIndex=[...state.messages].map((m,i)=>({m,i})).reverse().find(x=>x.m?.role==='agent')?.i;if(agentIndex==null)return false;
   const userIndex=[...state.messages].slice(0,agentIndex).map((m,i)=>({m,i})).reverse().find(x=>x.m?.role==='user')?.i;if(userIndex==null)return false;
   const user=state.messages[userIndex],agent=state.messages[agentIndex];if(!shouldGuardImprovementClaim(user.text,agent.text))return false;
   const records=verifiedImprovementsForRun(state,agent.runId||state.activeRunId),replacement=formatVerifiedImprovementReport(records,requestedImprovementCount(user.text));
-  if(agent.text===replacement)return false;agent.text=replacement;try{storage?.setItem(UI_STATE_KEY,JSON.stringify(state))}catch{}
-  const bubbles=[...document.querySelectorAll('#messages .msg.agent .bubble p')];if(bubbles.length)bubbles.at(-1).textContent=replacement;return true;
+  if(agent.text===replacement)return false;agent.text=replacement;saveUiState(storage,state);bubble.textContent=replacement;return true;
 }
 
 if(typeof window!=='undefined'&&typeof document!=='undefined'){
-  const observer=new MutationObserver(()=>repairLatestClaim(window.localStorage));observer.observe(document.documentElement,{subtree:true,childList:true,characterData:true});
-  queueMicrotask(()=>repairLatestClaim(window.localStorage));
+  const install=()=>{const messages=document.querySelector('#messages');if(!messages)return;let queued=false;const check=()=>{queued=false;repairLatestClaim(window.localStorage)};const observer=new MutationObserver(()=>{if(queued)return;queued=true;queueMicrotask(check)});observer.observe(messages,{subtree:true,childList:true});queueMicrotask(check)};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 }
