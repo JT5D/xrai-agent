@@ -34,12 +34,19 @@ jobs:
                   p.write_text(entry['text'])
               else:
                   assert hashlib.sha256(p.read_bytes()).hexdigest()==entry['sha'],str(p)
-                  chars=list(p.read_text())
+                  lines=p.read_text().splitlines(True)
                   for start,end,text in reversed(entry['hunks']):
-                      chars[start:end]=list(text)
-                  p.write_text(''.join(chars))
+                      lines[start:end]=[text]
+                  p.write_text(''.join(lines))
+          def replace(path,old,new):
+              p=Path(path);s=p.read_text();assert old in s,(path,old);p.write_text(s.replace(old,new))
+          replace('test/e2e-config.test.js',r'flow: \[chat-retry,',r'flow: \[conversation, chat-retry,')
+          replace('web/improvement-guard.js','d.commands.every(c=>c.exitCode===0)','d.commands.every(c=>c.exitCode===0&&!c.timedOut)')
+          replace('web/state.js','cmd:cut(c.cmd,500),exitCode:c.exitCode','cmd:cut(c.cmd,500),exitCode:c.exitCode,timedOut:Boolean(c.timedOut)')
+          replace('web/browser-workspace.js','commands:evidence.map(x=>({cmd:x.cmd,exitCode:x.code}))','commands:evidence.map(x=>({cmd:x.cmd,exitCode:x.code,timedOut:x.timedOut}))')
+          replace('web/app.js',"if(ui.runStatus==='running'){ui.runStatus='interrupted';","if(ui.runStatus==='running'&&!activeSubmission){ui.runStatus='interrupted';")
           p=Path('package.json');data=json.loads(p.read_text());data['version']='0.3.48';p.write_text(json.dumps(data,indent=2)+'\n')
-          p=Path('README.md');p.write_text(p.read_text().replace('v0.3.47','v0.3.48').replace('The evaluator remains internal evidence for learning; it is not the product response.','The evaluator supplies internal estimates, not execution proof. Browser suggestions remain candidates until a real verifier receipt exists. Sandbox patches are not committed or deployed.'))
+          p=Path('README.md');p.write_text(p.read_text().replace('v0.3.47','v0.3.48').replace('The evaluator remains internal evidence for learning; it is not the product response.','The evaluator supplies internal estimates, not execution proof. Browser conversation turns use bounded history and never promote a model score to proof. Sandbox patches are not committed or deployed.'))
           PY
           fi
       - name: Source checks
