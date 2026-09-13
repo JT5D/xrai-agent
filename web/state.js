@@ -1,3 +1,5 @@
+import { normalizeEvents } from './event-model.js';
+
 export const UI_STATE_KEY='xrai-ui-v4';
 export const UI_STATE_VERSION=4;
 
@@ -8,19 +10,9 @@ const HOST_PATTERNS=[
   /\b(npm|pnpm|yarn|bun|pytest|cargo|go test|make|cmake|gradle|mvn)\b/i,
   /\b(run|execute|verify)\b[\s\S]{0,30}\b(test|tests|build|lint|command|script)\b/i
 ];
-const CONTEXT_MARKER='\n\nPrevious XRAI context';
-const RETRY_PRIMARY=/^(?:(?:please\s+)?(?:try|do|run|execute|repeat|retry|rerun)(?:\s+(?:it|that|this|the\s+same(?:\s+thing)?))?(?:\s+again)?|(?:try|do|run)\s+that\s+again|same(?:\s+thing)?(?:\s+again)?|again|retry|rerun)[?.!]*$/i;
-
-function matchesHostTask(text=''){
-  return HOST_PATTERNS.some(pattern=>pattern.test(String(text)));
-}
 
 export function taskNeedsExecutionHost(task=''){
-  const text=String(task),primary=text.split(CONTEXT_MARKER,1)[0].trim();
-  if(matchesHostTask(primary))return true;
-  if(!RETRY_PRIMARY.test(primary)||!text.includes(CONTEXT_MARKER))return false;
-  const prior=text.match(/\nTask:\s*([^\n]+)/i)?.[1]||'';
-  return matchesHostTask(prior);
+  return HOST_PATTERNS.some(pattern=>pattern.test(String(task)));
 }
 
 export function isConstrainedDevice(nav={}){
@@ -53,7 +45,7 @@ export function normalizeUiState(value){
     ...base,
     ...value,
     messages:Array.isArray(value.messages)?value.messages.slice(-100):[],
-    events:Array.isArray(value.events)?value.events.slice(-500):[],
+    events:normalizeEvents(value.events).slice(-500),
     options:{...base.options,...(value.options||{})},
     result:value.result&&typeof value.result==='object'?value.result:null
   };
