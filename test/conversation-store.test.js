@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACTIVE_CHAT_KEY,CHAT_SWITCH_KEY,UI_STATE_KEY,finishChatTransition,isChatTransitioning,listChats,newChat,restoreChat,snapshotChat } from '../web/conversation-store.js';
+import { ACTIVE_CHAT_KEY,CHAT_SWITCH_KEY,UI_STATE_KEY,compareChats,finishChatTransition,forkChat,isChatTransitioning,listChats,newChat,restoreChat,snapshotChat } from '../web/conversation-store.js';
 
 function storage(){const m=new Map();return{getItem:k=>m.has(k)?m.get(k):null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k),dump:()=>m}}
-const state=(text,result='',run='r')=>({version:4,view:'chat',activeRunId:run,lastTask:text,runStatus:'completed',statusText:'done',messages:[{role:'user',text,runId:null},{role:'agent',text:result||`answer ${text}`,runId:run}],events:[{id:`e-${run}`,runId:run,type:'run:done',summary:`done ${text}`}],result:{runId:run,output:result||`answer ${text}`,diff:''},options:{workspace:'.',maxDepth:2,maxChildren:2,retries:1}});
+const state=(text,result='',run='r',score=.8,attempts=1)=>({version:4,view:'chat',activeRunId:run,lastTask:text,runStatus:'completed',statusText:'done',messages:[{role:'user',text,runId:null},{role:'agent',text:result||`answer ${text}`,runId:run}],events:[{id:`e-${run}`,runId:run,type:'run:done',summary:`done ${text}`}],result:{runId:run,output:result||`answer ${text}`,score,attempts,provider:'browser',changedFiles:[],diff:''},options:{workspace:'.',maxDepth:2,maxChildren:2,retries:1}});
 
 test('conversation store restores exact old progress behind one atomic transition',()=>{
   const s=storage(),session=storage();s.setItem(ACTIVE_CHAT_KEY,'chat-a');s.setItem(UI_STATE_KEY,JSON.stringify(state('first task','first result','run-a')));snapshotChat(s,state('first task','first result','run-a'),'chat-a');
@@ -24,6 +24,18 @@ test('switching back and forth preserves each chats messages events and result w
   s.setItem(ACTIVE_CHAT_KEY,'beta');s.setItem(UI_STATE_KEY,JSON.stringify(state('beta','beta answer','beta-run')));
   assert.equal(restoreChat(s,'alpha',session),true);let restored=JSON.parse(s.getItem(UI_STATE_KEY));assert.deepEqual(restored.messages.map(x=>x.text),['alpha','alpha answer']);assert.equal(restored.events[0].runId,'alpha-run');
   finishChatTransition(session);assert.equal(restoreChat(s,'beta',session),true);restored=JSON.parse(s.getItem(UI_STATE_KEY));assert.deepEqual(restored.messages.map(x=>x.text),['beta','beta answer']);assert.equal(restored.events[0].runId,'beta-run');assert.doesNotMatch(JSON.stringify(restored),/alpha answer/);
+});
+
+test('forking time travel preserves exact state and records minimal lineage',()=>{
+  const s=storage(),session=storage(),original=state('design agent','original answer','run-a',.82,2);s.setItem(ACTIVE_CHAT_KEY,'origin');s.setItem(UI_STATE_KEY,JSON.stringify(original));snapshotChat(s,original,'origin');
+  const branch=forkChat(s,'origin',session);assert.ok(branch);assert.equal(branch.parentId,'origin');assert.equal(branch.rootId,'origin');assert.equal(isChatTransitioning(session),true);assert.equal(s.getItem(ACTIVE_CHAT_KEY),branch.id);
+  const restored=JSON.parse(s.getItem(UI_STATE_KEY));assert.deepEqual(restored.messages,original.messages);assert.deepEqual(restored.events,original.events);assert.equal(restored.result.output,'original answer');assert.equal(restored.branch.parentChatId,'origin');
+});
+
+test('branch comparison uses stored outcomes without mutating either timeline',()=>{
+  const s=storage(),session=storage(),parent=state('improve system','parent result','parent-run',.8,2);s.setItem(ACTIVE_CHAT_KEY,'parent');s.setItem(UI_STATE_KEY,JSON.stringify(parent));snapshotChat(s,parent,'parent');const branch=forkChat(s,'parent',session);finishChatTransition(session);
+  const improved=state('improve system','branch result','branch-run',.92,1);s.setItem(ACTIVE_CHAT_KEY,branch.id);s.setItem(UI_STATE_KEY,JSON.stringify(improved));snapshotChat(s,improved,branch.id);
+  const c=compareChats(s,branch.id,'parent');assert.equal(c.left.score,.92);assert.equal(c.right.score,.8);assert.ok(c.scoreDelta>.11);assert.equal(c.attemptDelta,-1);assert.equal(listChats(s).find(x=>x.id==='parent').state.result.output,'parent result');
 });
 
 test('missing chat does not disturb current state or arm a transition',()=>{
