@@ -42,6 +42,11 @@ jobs:
           p=Path('README.md');p.write_text(p.read_text().replace('v0.3.47','v0.3.48').replace('The evaluator remains internal evidence for learning; it is not the product response.','The evaluator supplies internal estimates, not execution proof. Browser suggestions remain candidates until a real verifier receipt exists. Sandbox patches are not committed or deployed.'))
           PY
           python3 .upgrade.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('web/app.js');s=p.read_text();old='livePatch?.runId===ui.result?.runId?';assert old in s;p.write_text(s.replace(old,'livePatch&&livePatch.runId===ui.result?.runId?'))
+          p=Path('test/state.test.js');s=p.read_text();old='assert.equal(loaded.result.diff.length,50000)';assert old in s;p.write_text(s.replace(old,"assert.equal(loaded.result.diff,'','oversized patches must not be persisted as corrupt truncated diffs')")+"\ntest('complete small patches survive persistence unchanged',()=>{const storage=new MemoryStorage(),state=defaultUiState();const diff='diff --git a/a.js b/a.js\\n--- a/a.js\\n+++ b/a.js\\n@@ -1 +1 @@\\n-a\\n+b\\n';state.result={diff};saveUiState(storage,state);assert.equal(loadUiState(storage).result.diff,diff)});\n")
+          PY
       - name: Source and actual subprocess repair checks
         run: npm run check > source-checks.txt 2>&1
       - name: Browser conversation and actual WebContainer repair checks
