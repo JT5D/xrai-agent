@@ -28,23 +28,23 @@ test('public build links the canonical public XRAI Agent repository',async()=>{
   assert.doesNotMatch(readme,/JT5D\/unrepo/);
 });
 
-test('v0.3 public browser has zero-install WebContainer repo execution',async()=>{
-  const runtime=await fs.readFile(new URL('../web/repo-runtime.js',import.meta.url),'utf8');
+test('v0.3.1 public browser has integrated zero-install repo execution',async()=>{
+  const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
   const workspace=await fs.readFile(new URL('../web/browser-workspace.js',import.meta.url),'utf8');
-  const local=await fs.readFile(new URL('../web/local-agent.js',import.meta.url),'utf8');
   const html=await fs.readFile(new URL('../web/index.html',import.meta.url),'utf8');
   const bootstrap=await fs.readFile(new URL('../web/coi-bootstrap.js',import.meta.url),'utf8');
   const sw=await fs.readFile(new URL('../web/coi-sw.js',import.meta.url),'utf8');
-  assert.match(runtime,/runBrowserRepoTask/);
+  assert.match(app,/runBrowserRepoTask/);
+  assert.match(app,/downloadPatch/);
   assert.match(workspace,/@webcontainer\/api@1\.6\.4/);
   assert.match(workspace,/coep:'credentialless'/);
-  assert.match(workspace,/WebContainer \+ /);
+  assert.match(workspace,/\.teardown\(\)/);
+  assert.match(workspace,/command timed out/);
   assert.match(workspace,/raw\.githubusercontent\.com/);
   assert.match(workspace,/Dependency install/);
   assert.match(workspace,/Test verifier/);
-  assert.match(local,/LFM2\.5-350M-ONNX/);
   assert.match(html,/coi-bootstrap\.js/);
-  assert.match(html,/repo-runtime\.js/);
+  assert.doesNotMatch(html,/repo-runtime\.js/);
   assert.match(bootstrap,/serviceWorker\.register/);
   assert.match(sw,/Cross-Origin-Opener-Policy/);
   assert.match(sw,/Cross-Origin-Embedder-Policy/);

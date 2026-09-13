@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { browserRepoSupport,parseGitHubRepo } from '../web/browser-workspace.js';
+import { browserRepoSupport,buildChangeReport,buildFailureContext,parseGitHubRepo,selectRepoFiles } from '../web/browser-workspace.js';
 
 test('repo parser finds GitHub URLs and defaults to XRAI itself',()=>{
   assert.equal(parseGitHubRepo('inspect https://github.com/openai/openai and test it'),'openai/openai');
@@ -12,4 +12,36 @@ test('zero-install repo lane is explicit about browser compatibility',()=>{
   assert.equal(browserRepoSupport({userAgent:'Mozilla Chrome/140 Safari/537.36'}).supported,true);
   assert.equal(browserRepoSupport({userAgent:'Mozilla iPhone Mobile Safari/605.1'}).supported,false);
   assert.equal(browserRepoSupport({userAgent:'Mozilla Firefox/145'}).supported,false);
+});
+
+test('repo selection prioritizes package metadata, lockfiles, tests, and source',()=>{
+  const tree=[
+    {type:'blob',path:'docs/huge.md',size:200000},
+    {type:'blob',path:'src/app.js',size:1000},
+    {type:'blob',path:'test/app.test.js',size:800},
+    {type:'blob',path:'package-lock.json',size:500000},
+    {type:'blob',path:'package.json',size:500}
+  ];
+  const {selected}=selectRepoFiles(tree);
+  assert.deepEqual(selected.slice(0,2).map(x=>x.path),['package.json','package-lock.json']);
+  assert.ok(selected.some(x=>x.path==='test/app.test.js'));
+  assert.ok(selected.some(x=>x.path==='src/app.js'));
+});
+
+test('failure context prioritizes file paths present in real command output',()=>{
+  const files=[
+    {path:'src/a.js',text:'export const a = 1;'},
+    {path:'src/b.js',text:'export const b = 2;'},
+    {path:'test/a.test.js',text:'test("a",()=>{})'},
+    {path:'package.json',text:'{}'}
+  ];
+  const context=buildFailureContext(files,[{output:'Assertion failed at src/b.js:12:4'}],5000);
+  assert.ok(context.indexOf('--- src/b.js ---') < context.indexOf('--- test/a.test.js ---'));
+});
+
+test('change report exposes actual before and after evidence',()=>{
+  const diff=buildChangeReport([{path:'src/a.js',before:'const x=1;\nexport {x};',after:'const x=2;\nexport {x};'}]);
+  assert.match(diff,/--- src\/a\.js/);
+  assert.match(diff,/- const x=1/);
+  assert.match(diff,/\+ const x=2/);
 });

@@ -1,4 +1,5 @@
 import { clearUiState,isConstrainedDevice,loadUiState,saveUiState,taskNeedsExecutionHost } from './state.js';
+import { browserRepoSupport,runBrowserRepoTask } from './browser-workspace.js';
 
 const $=s=>document.querySelector(s);
 const $$=s=>[...document.querySelectorAll(s)];
@@ -10,7 +11,7 @@ let capabilities=null;
 let sse=null;
 let pollingRunId=null;
 
-const welcome={id:'welcome',role:'agent',text:'Give me a task. I will check what this runtime can actually access before I act. Repo edits and test execution only run when an execution host is connected; the public browser never pretends it changed files.',ts:Date.now(),runId:null};
+const welcome={id:'welcome',role:'agent',text:'Give me a task. On compatible desktop browsers I can inspect, test, and repair public Node/JS/TS repositories in an isolated zero-install browser sandbox. I report real command evidence and never fabricate repo access.',ts:Date.now(),runId:null};
 if(!ui.messages.length)ui.messages=[welcome];
 
 function persist(){ui=saveUiState(localStorage,ui)}
@@ -133,13 +134,19 @@ function setRunStatus(status,text=status){
   $('#statusHealth').textContent=status==='running'?'Running':status==='error'?'Needs attention':'Healthy';
   persist();
 }
+function updatePatchButton(){
+  const button=$('#downloadPatch');if(!button)return;button.hidden=!ui.result?.diff;
+}
 function applyResult(result,runId=ui.activeRunId){
-  ui.result={runId,output:result.output||'',score:result.score??null,attempts:result.attempts??0,learning:result.learning??null,provider:result.provider||mode};
+  ui.result={runId,output:result.output||'',score:result.score??null,attempts:result.attempts??0,learning:result.learning??null,provider:result.provider||mode,diff:result.diff||'',repo:result.repo||null,sha:result.sha||null,changedFiles:result.changedFiles||[]};
   $('#score').textContent=result.score==null?'—':`${Math.round(result.score*100)}%`;$('#attempts').textContent=result.attempts??'—';
   const learningStatus=result.learning?.status||result.learning||'none';$('#learning').textContent=learningStatus;
   $('#progressBar').style.width='100%';$('#progressValue').textContent='100%';$('#progressLabel').textContent='Complete';
   if(result.output)addMessage('agent',result.output,{runId});
-  setRunStatus('completed',`done · ${result.provider||mode}`);
+  if(result.diff)addMessage('system',`Verified sandbox patch preview:
+
+${result.diff.slice(0,7000)}`,{runId});
+  updatePatchButton();setRunStatus('completed',`done · ${result.provider||mode}`);
 }
 
 function connectSse(){
@@ -164,15 +171,18 @@ async function pollServerRun(runId){
 function showResume(text){$('#resumeText').textContent=text;$('#resumeBar').hidden=false}
 function hideResume(){$('#resumeBar').hidden=true}
 function capabilityMessage(){
-  if(mode==='browser')return '<strong>Public browser mode</strong>This page can chat locally, retrieve XRAI knowledge, learn browser skills, and preserve your run state. It cannot read or modify a repository, run shell commands, or execute tests. Repo/code tasks are blocked instead of simulated.';
+  if(mode==='browser'){
+    const support=browserRepoSupport(navigator);
+    return support.supported?'<strong>Zero-install browser execution</strong>Public Node/JS/TS repos run in an isolated WebContainer with real files, package commands, tests, bounded edits, patch output, and re-verification. No user API key or local install. Anonymous mode does not push to GitHub.':`<strong>Browser execution compatibility</strong>${support.reason} Normal no-key chat still works here.`;
+  }
   if(capabilities?.autonomous)return '';
   return '<strong>Execution host connected, reasoning host missing</strong>Start Ollama for no-key autonomous repo work, or use ChatGPT/Claude as the MCP reasoning host.';
 }
 function renderCapabilities(){
   const list=$('#capabilityList');list.innerHTML='';
-  const c=capabilities?.capabilities||{};
+  const c=capabilities?.capabilities||{},support=browserRepoSupport(navigator);
   const items=mode==='browser'?
-    [['On-device chat',true,isConstrainedDevice(navigator)?'mobile-safe':'local'],['XRAI knowledge',true,'local'],['Refresh recovery',true,'durable'],['Filesystem + shell',false,'host needed'],['Repo + test execution',false,'host needed']]:
+    [['On-device chat',true,isConstrainedDevice(navigator)?'mobile-safe':'local'],['XRAI knowledge',true,'local'],['Refresh recovery',true,'durable'],['Browser Node sandbox',support.supported,support.supported?'WebContainer':'desktop Chromium'],['Public repo + tests',support.supported,support.supported?'zero-install':'compatibility'],['Patch download',support.supported,'sandbox diff']]:
     [['Reasoning host',Boolean(capabilities?.autonomous),capabilities?.provider||'none'],['Filesystem + shell',Boolean(c.shell),'local'],['Repo + test execution',Boolean(c.repoExecution),'local'],['Refresh recovery',Boolean(c.runPersistence),'server'],['MCP endpoint',Boolean(c.mcp),'ready']];
   for(const [label,ok,note] of items){const li=document.createElement('li');const dot=document.createElement('i');dot.className=ok?'yes':'no';const text=document.createElement('span');text.textContent=label;const em=document.createElement('em');em.textContent=note;li.append(dot,text,em);list.append(li)}
 }
@@ -189,12 +199,13 @@ async function startServerRun(task){
 }
 async function startBrowserRun(task){
   if(taskNeedsExecutionHost(task)){
-    ui.activeRunId=uid();persist();
-    acceptEvent(makeEvent('run:start',task));
-    acceptEvent(makeEvent('capability:blocked','Repo/filesystem/test execution requires a connected execution host.',{name:'Capability check',data:{required:['filesystem','shell','repoExecution']}}));
-    const text='This task requires filesystem/repository and test execution. The public GitHub Pages runtime does not have those capabilities, so I stopped rather than pretending to inspect or modify a repo. Open Runtime and use the local execution host (Ollama needs no hosted API key), or connect XRAI through ChatGPT/Claude MCP.';
-    addMessage('agent',text);ui.result={runId:ui.activeRunId,output:text,score:null,attempts:0,learning:'none',provider:'browser-capability-check'};
-    acceptEvent(makeEvent('run:done','Task stopped safely before fake execution.',{data:{attempts:0,learning:'none'}}));setRunStatus('needs-host','execution host required');return;
+    const support=browserRepoSupport(navigator);
+    if(!support.supported){
+      ui.activeRunId=uid();persist();acceptEvent(makeEvent('run:start',task));acceptEvent(makeEvent('capability:blocked',support.reason,{name:'Browser compatibility',data:{required:['desktop Chromium','WebContainer']}}));
+      const text=`${support.reason} Open this same XRAI URL in current desktop Chrome or Edge for zero-install public-repo execution; no local install or API key is required.`;
+      addMessage('agent',text);ui.result={runId:ui.activeRunId,output:text,score:null,attempts:0,learning:'none',provider:'browser-compatibility'};acceptEvent(makeEvent('run:done','Task stopped before unsupported execution.',{data:{attempts:0,learning:'none'}}));setRunStatus('error','browser compatibility');return;
+    }
+    const data=await runBrowserRepoTask(task,{},acceptEvent,msg=>{ui.statusText=msg;$('#status').textContent=msg;persist()});ui.activeRunId=data.runId;applyResult(data,data.runId);return;
   }
   const {runLocalTask}=await import('./local-agent.js');
   const opts={retries:ui.options.retries,maxChildren:ui.options.maxChildren};
@@ -214,7 +225,7 @@ async function recoverRun(){
   renderMessages();renderGraph();renderActivity();renderTimeline();
   $('#status').textContent=ui.statusText||ui.runStatus||'ready';$('#runButton').disabled=ui.runStatus==='running';$('#rerun').disabled=!ui.lastTask||ui.runStatus==='running';
   for(const ev of activeEvents())updateFromEvent(ev);
-  if(ui.result){$('#score').textContent=ui.result.score==null?'—':`${Math.round(ui.result.score*100)}%`;$('#attempts').textContent=ui.result.attempts??'—';$('#learning').textContent=ui.result.learning?.status||ui.result.learning||'—'}
+  if(ui.result){$('#score').textContent=ui.result.score==null?'—':`${Math.round(ui.result.score*100)}%`;$('#attempts').textContent=ui.result.attempts??'—';$('#learning').textContent=ui.result.learning?.status||ui.result.learning||'—';updatePatchButton()}
   if(ui.lastTask)$('#currentTask').textContent=ui.lastTask;
   if(ui.runStatus!=='running')return;
   if(mode==='server'&&ui.activeRunId){
@@ -234,13 +245,13 @@ async function detectRuntime(){
     mode='browser';capabilities={autonomous:false,provider:'browser-local',capabilities:{browserLocal:true,runPersistence:true}};
     $('#modeLabel').textContent=isConstrainedDevice(navigator)?'browser · mobile-safe':'browser · no-key';
     $('#health').textContent=isConstrainedDevice(navigator)?'browser · mobile-safe':'browser · no-key';
-    $('#chatModeHint').textContent='Public browser: no-key local chat. Repo/file/test tasks require an execution host.';
+    const support=browserRepoSupport(navigator);$('#chatModeHint').textContent=support.supported?'Public browser: no-key chat + real public Node repo execution in an isolated browser sandbox.':'Public browser: no-key chat. Zero-install public repo execution currently needs desktop Chrome/Edge.';
   }
   updateCapabilityNotice();renderCapabilities();renderSkills();await recoverRun();
 }
 
 function resetUi(){
-  ui=clearUiState(localStorage);ui.messages=[welcome];if(window.innerWidth<760)ui.view='chat';persist();renderMessages();renderGraph();renderActivity();renderTimeline();$('#currentTask').textContent='No task running.';$('#score').textContent='—';$('#attempts').textContent='—';$('#learning').textContent='—';$('#progressBar').style.width='0%';$('#progressValue').textContent='0%';$('#progressLabel').textContent='Idle';$('#runMeta').textContent='No active run';$('#status').textContent='ready';hideResume();setView(ui.view,false)
+  ui=clearUiState(localStorage);ui.messages=[welcome];if(window.innerWidth<760)ui.view='chat';persist();renderMessages();renderGraph();renderActivity();renderTimeline();$('#currentTask').textContent='No task running.';$('#score').textContent='—';$('#attempts').textContent='—';$('#learning').textContent='—';$('#progressBar').style.width='0%';$('#progressValue').textContent='0%';$('#progressLabel').textContent='Idle';$('#runMeta').textContent='No active run';$('#status').textContent='ready';hideResume();updatePatchButton();setView(ui.view,false)
 }
 
 $$('.side-nav button').forEach(button=>button.addEventListener('click',()=>setView(button.dataset.view)));
@@ -253,6 +264,7 @@ $('#chatForm').addEventListener('submit',event=>{event.preventDefault();const ta
 $('#rerun').addEventListener('click',()=>ui.lastTask&&run(ui.lastTask,{resume:true}));
 $('#resumeButton').addEventListener('click',()=>{hideResume();if(mode==='server'&&ui.activeRunId&&ui.runStatus==='running')pollServerRun(ui.activeRunId);else ui.lastTask&&run(ui.lastTask,{resume:true})});
 $('#clear').addEventListener('click',resetUi);
+$('#downloadPatch').addEventListener('click',()=>{if(!ui.result?.diff)return;const name=`xrai-${String(ui.result.repo||'repo').replace(/[^a-z0-9._-]+/gi,'-')}-${String(ui.result.sha||'patch').slice(0,8)}.patch`,blob=new Blob([ui.result.diff],{type:'text/plain'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)});
 window.addEventListener('pagehide',persist);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')persist()});
 window.addEventListener('resize',()=>{if(ui.view==='workspace'&&window.innerWidth<760)setView('chat')});

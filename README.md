@@ -1,125 +1,141 @@
-# XRAI Agent v0.3.0
+# XRAI Agent v0.3.1
 
-A deliberately small recursive AI agent with **evidence-gated learning** and a **zero-install public-repository execution lane**.
+Small, transparent recursive AI agent with **evidence-gated skill evolution** and a zero-install browser execution lane.
 
-Live app: https://jt5d.github.io/xrai-agent/
+Live app:
 
-Source: https://github.com/JT5D/xrai-agent
+```text
+https://jt5d.github.io/xrai-agent/
+```
+
+Source:
+
+```text
+https://github.com/JT5D/xrai-agent
+```
 
 ## What works out of the box
 
-On a compatible desktop Chromium browser, open the public app and enter a task such as:
+On compatible desktop Chromium browsers, XRAI can handle public Node/JS/TS repo tasks without a local install or user-supplied model/API key:
 
 ```text
 inspect repo, fix failing tests, verify, & explain
 ```
 
-If no repository is named, XRAI uses `JT5D/xrai-agent`. You can also include a public GitHub URL or `owner/repo`.
+If no repo is named, XRAI defaults to `JT5D/xrai-agent`.
 
-For public Node/JS/TS repositories XRAI can, without a local installation or user-supplied model/API key:
+The public browser lane:
 
-1. inspect the public GitHub repository,
-2. import source files into an isolated browser WebContainer,
-3. install project dependencies,
-4. run the repository's real test/check/lint/build commands,
-5. use an on-device model to propose bounded exact-match edits when verification fails,
-6. apply edits only inside the disposable browser workspace,
-7. re-run verification,
-8. report success/failure from actual process exit codes.
+1. resolves the public GitHub repo
+2. pins the run to an exact commit SHA
+3. imports bounded source + package metadata + lockfiles
+4. boots a fresh isolated WebContainer
+5. installs dependencies
+6. runs the repo's real `test`, `check`, `lint`, or `build` scripts
+7. uses actual exit codes as evidence
+8. if verification fails, gives the on-device fixer only the failing output plus error-directed file context
+9. applies bounded exact-match edits inside the disposable sandbox
+10. re-runs verification
+11. reports the verified result and exposes a downloadable patch preview
+12. tears down the sandbox so later runs start clean
 
-The browser run and visible UI state are persisted so a reload does not silently erase the task or result.
+Commands have hard timeouts, and XRAI never claims success unless the verification commands actually pass.
+
+Anonymous browser mode does **not** push changes back to GitHub. Private repos, write-back, non-Node/native toolchains, very large repos, and unsupported browsers need a separate authorized/hosted execution lane rather than being simulated.
 
 ## Why this architecture
 
-XRAI keeps the trusted kernel small. It does not add LangChain/LangGraph, Redis, a vector database, a graph database, or a separate swarm service unless measurement proves one is needed.
+For the current public/open-source product, browser execution is the simplest path that satisfies the core experience:
 
 ```text
-User task
-   |
-   v
-XRAI capability router
-   |-----------------------------|
-   |                             |
-normal chat                 public repo task
-   |                             |
-on-device model             GitHub public source
-   |                             |
-XRAI knowledge              WebContainer sandbox
-                                 |
-                         install + real tests
-                                 |
-                         pass -------- fail
-                          |              |
-                       evidence      local model
-                          |          bounded edits
-                          |              |
-                          |         re-run tests
-                          |______________|
-                                 |
-                          evidence gate
+one URL -> one prompt -> real repo -> real tests -> bounded fix -> real verification
 ```
 
-GitHub Pages cannot set the COOP/COEP response headers normally required by WebContainers, so the public build uses a small same-origin service worker to establish cross-origin isolation and boots WebContainers in `credentialless` mode.
+No VM provisioning, no user API key, no local daemon, and no extra orchestration framework.
+
+The browser execution dependency is isolated in:
+
+```text
+web/browser-workspace.js
+```
+
+so a hosted sandbox can be added later without changing the XRAI learning kernel.
 
 ## Evidence-gated learning
 
-XRAI does not treat model confidence as proof.
-
-Its durable learning lifecycle is:
+XRAI does not promote a reusable skill because a model says it is useful.
 
 ```text
-task -> retrieve promoted skills -> execute -> verify -> candidate skill
-     -> replay/evidence gate -> promote/reject -> measure future utility
-     -> periodic consolidation/rollback
+task
+  -> retrieve promoted skills only
+  -> execute
+  -> verify/evaluate
+  -> candidate skill
+  -> evidence gate
+  -> promote / keep candidate / reject
+  -> measure future utility
+  -> slow meta-maintenance + rollback
 ```
 
-Rules include:
+Server/CLI skills can be promoted immediately by a safe concrete verifier. Browser-chat skills need repeated successful support from distinct task fingerprints. Candidate and rejected skills are excluded from normal retrieval.
 
-- scores below `0.82` cannot learn,
-- safe deterministic verifiers outrank model judgment,
-- unverified skills require repeated distinct successful support,
-- candidate/rejected skills never enter normal retrieval,
-- underperforming promoted versions can roll back,
-- sensitive/credential-shaped memory is rejected,
-- trusted kernel code is not autonomously rewritten.
+## Persistence
 
-## Browser execution boundaries
+Browser state is bounded and durable across refresh/page eviction:
 
-The zero-install lane intentionally starts narrow:
+```text
+xrai-ui-v3
+xrai-skills-v2
+xrai-meta-v2
+xrai-runs-v2
+```
 
-- **works:** public Node/JavaScript/TypeScript repositories with `package.json` on compatible desktop Chromium browsers,
-- **does not access:** your computer's local filesystem,
-- **not yet in this lane:** private repositories, durable GitHub write-back/PR creation, very large repositories, mobile browsers, and arbitrary non-Node toolchains.
+Tasks, visible events, results, and patch metadata survive reload. A browser-only run that is interrupted mid-generation restarts safely from the recovered task; server-backed runs can reattach by run ID.
 
-Those unsupported cases are reported explicitly rather than simulated.
+## Browser runtime
 
-WebContainer API is isolated behind `web/browser-workspace.js`, so a hosted sandbox can be added later without changing the XRAI kernel. Commercial production use of WebContainer API may require the applicable StackBlitz licensing/configuration.
+Repo execution uses WebContainer API with cross-origin isolation supplied by the same-origin service worker on GitHub Pages.
 
-## Local/host-model modes
+Ordinary no-key chat tries Chrome built-in AI first, then falls back to an on-device Transformers.js model:
 
-The browser lane is not the only runtime. XRAI also retains its existing CLI, local server, Ollama, OpenAI, Claude Code MCP, and ChatGPT MCP paths.
+```text
+desktop/capable:    onnx-community/LFM2.5-350M-ONNX
+mobile/constrained: onnx-community/SmolLM2-135M-Instruct-ONNX-MHA
+```
 
-No hosted model key is required with Ollama:
+Current repo execution target is desktop Chromium. WebContainers have broader beta browser support, but XRAI intentionally keeps the public repair lane on the most reliable path until evidence justifies widening it.
+
+WebContainer API is used here for the open-source/prototype execution lane. Review StackBlitz licensing before a commercial hosted deployment.
+
+## Optional local / host-model modes
+
+### Local Ollama
 
 ```bash
 ollama pull qwen3:0.6b
+node src/cli.js chat
+```
+
+### Local web execution host
+
+```bash
 node src/cli.js web
 ```
 
-Open:
+Default:
 
 ```text
 http://127.0.0.1:8787
 ```
 
-Claude Code can use XRAI as an MCP tool host:
+### Claude Code MCP
 
 ```bash
 claude mcp add --transport stdio --scope project xrai -- node "$PWD/src/cli.js" mcp
 claude mcp get xrai
 ```
 
-An OpenAI key remains optional for stronger hosted autonomous runs:
+### Optional hosted OpenAI mode
 
 ```bash
 export OPENAI_API_KEY="..."
@@ -127,50 +143,75 @@ export XRAI_MODEL=gpt-5.6-luna
 node src/cli.js chat
 ```
 
+This is optional; the public browser experience does not require the user to provide an OpenAI key.
+
 ## MCP tools
 
-v0.3 exposes:
+- `xrai_run`
+- `xrai_shell`
+- `xrai_knowledge`
+- `xrai_skills`
 
-- `xrai_run` — recursive execution with evidence-gated learning,
-- `xrai_shell` — workspace-rooted shell,
-- `xrai_knowledge` — base knowledge plus promoted skills,
-- `xrai_skills` — skill and meta-policy inspection.
+Do not expose `xrai_shell` as a public unauthenticated endpoint.
 
-Do not expose `xrai_shell` as an unauthenticated public endpoint.
+## CLI
 
-## Quick start
+```bash
+node src/cli.js chat
+node src/cli.js run "task"
+node src/cli.js web
+node src/cli.js mcp
+node src/cli.js skills
+node src/cli.js sync
+```
+
+## Development
 
 ```bash
 git clone https://github.com/JT5D/xrai-agent.git
 cd xrai-agent
 npm run check
-node src/cli.js web
 ```
 
-Runtime npm dependencies remain zero for the Node/CLI core. The public browser dynamically loads its optional browser model/runtime dependencies only when those capabilities are used.
+`npm run check` performs syntax checks plus the deterministic test suite. Network/model calls are not required by the tests.
 
-## Tests
+Current deterministic coverage includes:
 
-```bash
-npm run check
-```
+- public repo parsing/defaulting
+- browser compatibility gating
+- repo file prioritization and lockfile retention
+- error-directed failure context
+- patch evidence output
+- knowledge ranking
+- MCP tool surface
+- bounded Ollama detection
+- verifier-gated promotion
+- repeated-support promotion
+- failed-verifier rejection
+- sensitive-memory rejection
+- verifier allowlist
+- slow meta-learning
+- rollback
+- browser-local model selection
+- durable UI state
+- background server-run recovery
+- integrated zero-install repo execution
+- fresh sandbox teardown
+- command timeout guard
+- patch download surface
 
-The deterministic suite covers the recursive skill lifecycle, fail-closed browser evaluation, sensitive-memory rejection, promotion/rollback rules, MCP surface, reload recovery, background server runs, mobile model selection, public-repo parsing/routing, WebContainer integration, static-host isolation bootstrap, and the redesigned workspace UI.
+## Current boundaries
 
-Network/model calls are not required for the deterministic suite.
-
-## Knowledge source
+- Anonymous browser execution reads public repos and changes only the disposable sandbox; it does not push to GitHub.
+- Native Node addons and non-Web/WASM toolchains may not run inside WebContainers.
+- Very large repositories are rejected rather than partially pretending to load them.
+- Browser inference is deliberately small; deterministic test evidence outranks model confidence.
+- Trusted kernel/tool boundaries do not autonomously rewrite themselves.
 
 Seed knowledge is synchronized from:
 
 ```text
 https://github.com/JT5D/xrai/tree/main/knowledge
-```
-
-Refresh it with:
-
-```bash
-node src/cli.js sync
 ```
 
 MIT licensed.
