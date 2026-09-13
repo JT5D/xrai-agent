@@ -25,3 +25,14 @@ test('web UI exposes durable recovery, zero-install repo execution, and patch do
   assert.match(html,/browser-enhancements\.js\?v=\d+\.\d+\.\d+/);
   assert.doesNotMatch(html,/repo-runtime\.js/);
 });
+
+test('retry memory never rewrites the visible chat input',async()=>{
+  const guard=await fs.readFile(new URL('../web/input-guard.js',import.meta.url),'utf8');
+  const enhancements=await fs.readFile(new URL('../web/browser-enhancements.js',import.meta.url),'utf8');
+  assert.doesNotMatch(guard,/addEventListener\(['"]submit['"]/);
+  assert.doesNotMatch(guard,/input\.value\s*=\s*contextualizeFollowup/);
+  assert.match(enhancements,/isRetryFollowup/);
+  assert.match(enhancements,/lastMeaningfulUserTask/);
+  assert.match(enhancements,/appendMessage\(state,'user',visibleTask\(task\)/);
+  assert.match(enhancements,/sessionStorage\.setItem\(RETRY_PENDING_KEY/);
+});
