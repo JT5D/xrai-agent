@@ -15,10 +15,10 @@
       <div><strong>XRAI <em>Agent</em></strong><small>small · recursive · evidence-gated</small></div>
     </div>
     <div class="feature-strip" aria-label="XRAI capabilities">
-      <div><b>∞</b><span>Self-improving<small>evidence over memory</small></span></div>
+      <div><b>∞</b><span>Self-improving<small>verified gains only</small></span></div>
       <div><b>⌘</b><span>XRAI knowledge<small>promoted skills only</small></span></div>
       <div><b>◇</b><span>No-key modes<small>browser · Ollama · MCP</small></span></div>
-      <div><b>▣</b><span>Visual orchestration<small>observable events</small></span></div>
+      <div><b>▣</b><span>Visual orchestration<small>inspectable evidence</small></span></div>
     </div>
     <button id="runtimeButton" class="runtime-pill" type="button"><span class="status-dot"></span><span id="health">detecting runtime</span></button>
   </header>
@@ -36,10 +36,10 @@
       <div class="agent-card">
         <div><span class="status-dot"></span><strong id="agentState">Agent ready</strong></div>
         <dl>
-          <div><dt>Version</dt><dd>0.3.13</dd></div>
+          <div><dt>Version</dt><dd>0.3.14</dd></div>
           <div><dt>Mode</dt><dd id="modeLabel">detecting</dd></div>
           <div><dt>Persistence</dt><dd>on</dd></div>
-          <div><dt>Learning</dt><dd>evidence-gated</dd></div>
+          <div><dt>Learning</dt><dd>verified-only</dd></div>
         </dl>
       </div>
     </aside>
@@ -48,7 +48,7 @@
       <section class="workspace-grid">
         <section class="panel orchestration-panel" id="workspacePanel">
           <div class="panel-header orchestration-head">
-            <div><h1>Agent Orchestration</h1><p>Live execution state, tools, verification, and learning — never hidden chain-of-thought.</p></div>
+            <div><h1>Agent Orchestration</h1><p>Hover to preview. Click for evidence. Double-click or press E to expand. No hidden chain-of-thought.</p></div>
             <div class="run-controls">
               <span class="live-badge"><span class="status-dot"></span>Live</span>
               <button id="rerun" class="subtle" type="button" disabled>Rerun</button>
@@ -139,11 +139,12 @@
     <a class="source-note" style="color:inherit;text-decoration:none" href="https://github.com/JT5D/xrai-agent" target="_blank" rel="noopener noreferrer"><strong>Open source</strong><small>GitHub · JT5D/xrai-agent ↗</small></a>
   </footer>
 
-  <script src="./coi-bootstrap.js?v=0.3.13"></script>
-  <script src="./static-runtime.js?v=0.3.13"></script>
-  <script type="module" src="./input-guard.js?v=0.3.13"></script>
-  <script type="module" src="./browser-enhancements.js?v=0.3.13"></script>
-  <script type="module" src="./event-inspector.js?v=0.3.13"></script>
-  <script type="module" src="./app.js?v=0.3.13"></script>
+  <script src="./coi-bootstrap.js?v=0.3.14"></script>
+  <script src="./static-runtime.js?v=0.3.14"></script>
+  <script type="module" src="./input-guard.js?v=0.3.14"></script>
+  <script type="module" src="./browser-enhancements.js?v=0.3.14"></script>
+  <script type="module" src="./event-inspector.js?v=0.3.14"></script>
+  <script type="module" src="./improvement-guard.js?v=0.3.14"></script>
+  <script type="module" src="./app.js?v=0.3.14"></script>
 </body>
 </html>
