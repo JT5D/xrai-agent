@@ -16,23 +16,19 @@ test('repo and test tasks route to execution while ordinary chat does not',()=>{
   assert.equal(taskNeedsExecutionHost('Explain evidence-gated skill learning simply'),false);
 });
 
-test('question follow-up references prior evidence without rerunning execution',()=>{
-  const followup='is it fixed?\n\nPrevious XRAI context (mode: reference; use this context automatically; do not ask the user to restate it):\nTask: review repo, fix any failed tests, verify & explain\nResult: npm test PASS';
-  assert.equal(taskNeedsExecutionHost(followup),false);
+test('contextual followups never carry hidden execution context through the task classifier',()=>{
+  assert.equal(taskNeedsExecutionHost('is it fixed?'),false);
+  assert.equal(taskNeedsExecutionHost('try that again'),false);
+  assert.equal(taskNeedsExecutionHost('retry'),false);
 });
 
-test('retry follow-up reruns the prior execution task automatically',()=>{
-  const followup='try that again\n\nPrevious XRAI context (mode: retry; use this context automatically; do not ask the user to restate it):\nTask: review repo, fix any failed tests, verify & explain\nResult: dependency install failed';
-  assert.equal(taskNeedsExecutionHost(followup),true);
-});
-
-test('UI state v4 survives a reload with task, messages, events, and running status intact',()=>{
+test('UI state v4 survives a reload with task, messages, canonical events, and running status intact',()=>{
   const storage=new MemoryStorage(),state=defaultUiState();
   assert.equal(UI_STATE_VERSION,4);
   state.lastTask='persistent task';state.runStatus='running';state.activeRunId='run-1';state.messages=[{id:'m1',role:'user',text:'persistent task'}];state.events=[{id:'e1',runId:'run-1',type:'run:start',summary:'persistent task'}];
   saveUiState(storage,state);
   const loaded=loadUiState(storage);
-  assert.equal(loaded.lastTask,'persistent task');assert.equal(loaded.runStatus,'running');assert.equal(loaded.activeRunId,'run-1');assert.equal(loaded.messages.length,1);assert.equal(loaded.events.length,1);assert.ok(storage.getItem(UI_STATE_KEY));
+  assert.equal(loaded.lastTask,'persistent task');assert.equal(loaded.runStatus,'running');assert.equal(loaded.activeRunId,'run-1');assert.equal(loaded.messages.length,1);assert.equal(loaded.events.length,1);assert.equal(loaded.events[0].kind,'run');assert.ok(storage.getItem(UI_STATE_KEY));
 });
 
 test('old v3 state is intentionally ignored by the v4 state loader',()=>{
