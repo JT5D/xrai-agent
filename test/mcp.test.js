@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {handleRpc} from '../src/mcp.js';
+test('MCP initializes and lists tools',async()=>{const init=await handleRpc({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25'}});assert.equal(init.result.serverInfo.name,'xrai-agent');const list=await handleRpc({jsonrpc:'2.0',id:2,method:'tools/list',params:{}});assert.ok(list.result.tools.some(t=>t.name==='xrai_shell'));assert.ok(list.result.tools.some(t=>t.name==='xrai_knowledge'))});
