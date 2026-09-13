@@ -11,6 +11,9 @@ const titleFor=state=>{
   const text=String(first?.text||state?.lastTask||'New chat').replace(/\s+/g,' ').trim();
   return (text||'New chat').slice(0,58);
 };
+function beginTransition(transitionStorage,chatId){try{transitionStorage?.setItem(CHAT_SWITCH_KEY,chatId);return true}catch{return false}}
+export function isChatTransitioning(transitionStorage=globalThis.sessionStorage){try{return Boolean(transitionStorage?.getItem(CHAT_SWITCH_KEY))}catch{return false}}
+export function finishChatTransition(transitionStorage=globalThis.sessionStorage){try{transitionStorage?.removeItem(CHAT_SWITCH_KEY)}catch{}}
 export function compactState(state={}){
   const result=state.result&&typeof state.result==='object'?{...state.result,diff:String(state.result.diff||'').slice(0,50000)}:null;
   return {...state,messages:Array.isArray(state.messages)?state.messages.slice(-100):[],events:Array.isArray(state.events)?state.events.slice(-220):[],result,updatedAt:Date.now()};
@@ -36,32 +39,29 @@ export function ensureActiveChat(storage=globalThis.localStorage,state=null){
 export function snapshotChat(storage=globalThis.localStorage,state=null,chatId=null){
   if(!state||typeof state!=='object')return null;
   const active=chatId||ensureActiveChat(storage);
-  const rows=listChats(storage).filter(x=>x.id!==active);
-  const compact=compactState(state),row={id:active,title:titleFor(compact),createdAt:Date.now(),updatedAt:Date.now(),state:compact};
-  const previous=listChats(storage).find(x=>x.id===active);if(previous)row.createdAt=previous.createdAt||row.createdAt;
-  writeChats(storage,[row,...rows]);return row;
+  const rows=listChats(storage),previous=rows.find(x=>x.id===active),compact=compactState(state);
+  const row={id:active,title:titleFor(compact),createdAt:previous?.createdAt||Date.now(),updatedAt:Date.now(),state:compact};
+  writeChats(storage,[row,...rows.filter(x=>x.id!==active)]);return row;
 }
 export function snapshotCurrentChat(storage=globalThis.localStorage){
   const state=parse(storage,UI_STATE_KEY,null);if(!state)return null;
   return snapshotChat(storage,state,ensureActiveChat(storage,state));
 }
-export function newChat(storage=globalThis.localStorage){
+export function newChat(storage=globalThis.localStorage,transitionStorage=globalThis.sessionStorage){
   snapshotCurrentChat(storage);
-  const next=id();try{storage?.setItem(ACTIVE_CHAT_KEY,next);storage?.removeItem(UI_STATE_KEY)}catch{}
-  return next;
+  const next=id();
+  if(!beginTransition(transitionStorage,next))return null;
+  try{storage?.setItem(ACTIVE_CHAT_KEY,next);storage?.removeItem(UI_STATE_KEY);return next}catch{finishChatTransition(transitionStorage);return null}
 }
 export function restoreChat(storage=globalThis.localStorage,chatId,transitionStorage=globalThis.sessionStorage){
   const row=listChats(storage).find(x=>x.id===chatId);if(!row)return false;
   snapshotCurrentChat(storage);
+  if(!beginTransition(transitionStorage,row.id))return false;
   try{
-    transitionStorage?.setItem(CHAT_SWITCH_KEY,row.id);
     storage?.setItem(ACTIVE_CHAT_KEY,row.id);
     storage?.setItem(UI_STATE_KEY,JSON.stringify(compactState(row.state)));
     return true;
-  }catch{
-    try{transitionStorage?.removeItem(CHAT_SWITCH_KEY)}catch{}
-    return false;
-  }
+  }catch{finishChatTransition(transitionStorage);return false}
 }
 export function deleteChat(storage=globalThis.localStorage,chatId){
   const rows=listChats(storage).filter(x=>x.id!==chatId);writeChats(storage,rows);
