@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import { checkChromeModelAvailability,compoundingMetrics,extractEval,selectBrowserModelProfile,withWebGpuFallback } from '../web/local-agent.js';
+import { checkChromeModelAvailability,compoundingMetrics,extractEval,resolveBrowserModelProfile,selectBrowserModelProfile,withWebGpuFallback } from '../web/local-agent.js';
 import { formatVerifiedImprovementReport,requestedImprovementCount,shouldGuardImprovementClaim,verifiedImprovementsForRun } from '../web/improvement-guard.js';
 
 test('static Pages build has no-key local inference and evidence-gated skill learning',async()=>{
@@ -28,6 +28,13 @@ test('browser local model retries WASM when a claimed WebGPU backend is unusable
   assert.deepEqual(calls.map(x=>x.device),['webgpu','wasm']);
   assert.equal(result.device,'wasm');assert.equal(result.dtype,'q4');
   assert.match(progress.join(' '),/retrying with WASM/i);
+});
+
+test('browser model selects WASM before Transformers loads when WebGPU has no real adapter',async()=>{
+  const noAdapter=await resolveBrowserModelProfile({userAgent:'Desktop',deviceMemory:16,gpu:{requestAdapter:async()=>null}},true);
+  assert.equal(noAdapter.device,'wasm');assert.equal(noAdapter.dtype,'q4');
+  const adapter=await resolveBrowserModelProfile({userAgent:'Desktop',deviceMemory:16,gpu:{requestAdapter:async()=>({})}},true);
+  assert.equal(adapter.device,'webgpu');assert.equal(adapter.dtype,'q4f16');
 });
 
 test('live deployed E2E stops waiting as soon as the app records an error',async()=>{
