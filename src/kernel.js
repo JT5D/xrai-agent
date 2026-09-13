@@ -30,7 +30,7 @@ const tools=[
 
 export async function runTask(task,opts={}){
   if(!process.env.OPENAI_API_KEY && !opts.forceOpenAI)return runOllamaTask(task,opts,{primitiveShell,primitiveKnowledge});
-  const runId=crypto.randomUUID(),root=workspace(opts.workspace),model=opts.model||MODEL(),maxDepth=opts.maxDepth??Number(process.env.XRAI_MAX_DEPTH||2),maxChildren=opts.maxChildren??Number(process.env.XRAI_MAX_CHILDREN||2),retries=opts.retries??Number(process.env.XRAI_MAX_RETRIES||1),learn=opts.learn??true;
+  const runId=opts.runId||crypto.randomUUID(),root=workspace(opts.workspace),model=opts.model||MODEL(),maxDepth=opts.maxDepth??Number(process.env.XRAI_MAX_DEPTH||2),maxChildren=opts.maxChildren??Number(process.env.XRAI_MAX_CHILDREN||2),retries=opts.retries??Number(process.env.XRAI_MAX_RETRIES||1),learn=opts.learn??true;
   const promotedSkills=await retrieveSkills(root,task,4),meta=await getMetaPolicy(root),skillContext=formatSkills(promotedSkills),metaGuidance=(meta.guidance||[]).join(' ');
   bus.emitEvent(runId,'run:start',task,{data:{workspace:root,model,maxDepth,maxChildren,retries,skills:promotedSkills.map(s=>`${s.id}@v${s.version}`)}});
   for(const s of promotedSkills)bus.emitEvent(runId,'skill:hit',`${s.title} · ${Math.round(s.score*100)}%`,{name:'Promoted skill',data:{id:s.id,version:s.version,score:s.score,confidence:s.confidence}});

@@ -1,4 +1,4 @@
-# XRAI Agent v0.2
+# XRAI Agent v0.2.1
 
 A deliberately small, transparent recursive AI agent with **evidence-gated skill evolution**.
 
@@ -18,9 +18,17 @@ Live no-key browser build:
 https://jt5d.github.io/xrai-agent/
 ```
 
-## What changed in v0.2
+## What changed in v0.2.1
 
-v0.1 learned by saving one evaluator-written lesson after a high-scoring run. v0.2 replaces that with a stricter lifecycle:
+v0.2.1 keeps the evidence-gated learning architecture and hardens the browser runtime after real mobile testing:
+
+- **durable UI state:** task, messages, events, result, selected view, and run state survive refresh/page eviction
+- **recoverable runs:** interrupted browser-local runs restore with an explicit Resume action; local-server runs continue in the background and can reattach by run ID
+- **truthful execution boundaries:** the public GitHub Pages build blocks repo/filesystem/test prompts instead of pretending it inspected or changed files
+- **mobile-safe inference:** constrained devices use a smaller on-device model, one worker, and no evaluator retry to reduce memory pressure
+- **workspace redesign:** visual orchestration, chat, status, activity, skills, runtime, and execution-host choices now live in one responsive interface
+
+The v0.2 learning change remains the core architecture. v0.1 learned by saving one evaluator-written lesson after a high-scoring run; v0.2 replaced that with a stricter lifecycle:
 
 ```text
 task
@@ -109,7 +117,10 @@ The browser uses localStorage:
 xrai-skills-v2
 xrai-meta-v2
 xrai-runs-v2
+xrai-ui-v3
 ```
+
+`xrai-ui-v3` stores bounded UI/run recovery state so a browser refresh or mobile page eviction does not erase the user's task, messages, visible events, or completed result.
 
 XRAI stores compact skill procedures and hashed task fingerprints, not task outputs. Credential/private-key/email-shaped candidate memory is rejected. Evaluators are also instructed never to put secrets or personal data into skills.
 
@@ -123,13 +134,16 @@ Open:
 https://jt5d.github.io/xrai-agent/
 ```
 
-The browser tries Chrome built-in AI first. When unavailable it falls back to:
+The public browser is deliberately a **local chat/knowledge runtime**, not a filesystem execution host. It can chat on-device, retrieve XRAI knowledge, orchestrate browser-local workers, and learn browser skills. It **cannot** read or modify a repository, run shell commands, or execute project tests. Repo/filesystem/test prompts are detected and blocked rather than simulated.
+
+For ordinary browser-local tasks, XRAI tries Chrome built-in AI first. When unavailable it uses Transformers.js with a device-aware fallback:
 
 ```text
-onnx-community/LFM2.5-350M-ONNX
+desktop/capable:    onnx-community/LFM2.5-350M-ONNX
+mobile/constrained: onnx-community/SmolLM2-135M-Instruct-ONNX-MHA
 ```
 
-through Transformers.js/WebGPU. The first use may download and cache the local model.
+Capable devices prefer WebGPU; the fallback can use WASM when WebGPU is unavailable. Constrained devices also reduce generation length, clamp to one worker, and disable evaluator retries to reduce memory pressure. The first use may download and cache the selected local model.
 
 ### Local CLI with Ollama
 
@@ -140,9 +154,12 @@ node src/cli.js chat
 
 XRAI talks directly to Ollama's local HTTP API and installs no model SDK.
 
-### Local web UI
+### Local web UI — full repo/filesystem execution
+
+For a no-key browser UI that can actually inspect/edit a local repository and run tests, use a local Ollama model and start XRAI from that repository/workspace:
 
 ```bash
+ollama pull qwen3:0.6b
 node src/cli.js web
 ```
 
@@ -150,6 +167,15 @@ Open:
 
 ```text
 http://127.0.0.1:8787
+```
+
+The local server is the execution host: it can use the workspace-rooted shell, read/modify files through tool calls, and run project verification commands. Browser disconnects do not cancel active server runs; the UI persists the run ID and reattaches after refresh.
+
+Run state is also available at:
+
+```text
+GET /api/runs/:runId
+GET /api/runs/latest
 ```
 
 The same server exposes MCP at:
@@ -203,7 +229,7 @@ Do not expose `xrai_shell` as a public unauthenticated endpoint. XRAI binds to `
 
 ## MCP tools
 
-v0.2 exposes four tools:
+v0.2.1 exposes four tools:
 
 - `xrai_run` — complete recursive run with evidence-gated learning
 - `xrai_shell` — workspace-rooted shell execution
@@ -221,9 +247,9 @@ node src/cli.js skills
 node src/cli.js sync
 ```
 
-## Control Room
+## Workspace UI
 
-The browser UI shows observable execution state:
+The redesigned browser UI combines visual orchestration and basic chat. It shows observable execution state:
 
 - parent/child agents
 - tool activity
@@ -323,13 +349,21 @@ The deterministic suite currently verifies:
 - rollback to a prior proven skill version
 - static no-key browser inference
 - browser evaluator fail-closed behavior
-- Chat + Control Room surfaces
+- redesigned visual workspace + chat surfaces
+- public-browser repo-task capability blocking
+- UI state persistence across reload
+- constrained-device model selection
+- background server-run persistence after client disconnect
+- HTTP run reattachment by run ID
 
 Network/model calls are not required for the test suite.
 
 ## Current boundaries
 
-- Browser Pages mode cannot run commands on the user's machine.
+- Public GitHub Pages mode cannot read/modify a repository or run commands/tests on the user's machine; those prompts are blocked before model loading.
+- Full repo fixing requires an execution host: local XRAI + Ollama, Claude Code MCP, or a compatible remote MCP host.
+- Browser-local work is recoverable after reload, but an interrupted browser-only generation restarts from the restored task rather than resuming a model token stream mid-generation.
+- Server-backed runs continue after browser disconnect and can be reattached by run ID.
 - Browser skill promotion therefore requires repeated independent success rather than a shell verifier.
 - Model evaluation is still probabilistic; deterministic project verification remains stronger evidence.
 - The kernel does not autonomously rewrite itself. Skills/meta-guidance evolve; kernel changes remain test-gated and version-controlled.

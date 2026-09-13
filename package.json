@@ -1,6 +1,6 @@
 {
   "name": "xrai-agent",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Zero-dependency recursive AI agent with evidence-gated skill evolution, CLI, control room, XRAI knowledge, and MCP.",
   "type": "module",
   "bin": {
@@ -12,7 +12,7 @@
     "web": "node src/cli.js web",
     "mcp": "node src/cli.js mcp",
     "test": "node --test test/*.test.js",
-    "check": "node --check src/*.js && node --check web/app.js && node --check web/local-agent.js && npm test"
+    "check": "node --check src/*.js && node --check web/app.js && node --check web/local-agent.js && node --check web/state.js && npm test"
   },
   "engines": {
     "node": ">=20"
