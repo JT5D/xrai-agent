@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {contextualizeFollowup,migrateLegacyUiState,sanitizeTask,stateLooksStale} from '../web/input-guard.js';
+import {contextualizeFollowup,migrateLegacyUiState,purgeStaleUiState,sanitizeTask,stateLooksStale} from '../web/input-guard.js';
 
 class MemoryStorage{
   constructor(seed={}){this.map=new Map(Object.entries(seed))}
@@ -28,6 +28,14 @@ test('legacy stale browser state is detected and cleared once',()=>{
   assert.equal(stateLooksStale(stale),true);
   const storage=new MemoryStorage({'xrai-ui-v3':JSON.stringify(stale)});
   assert.equal(migrateLegacyUiState(storage),true);
+  assert.equal(storage.getItem('xrai-ui-v3'),null);
+});
+
+test('current stale browser state is purged after execution upgrades',()=>{
+  const stale={version:4,messages:[{text:'The public GitHub Pages runtime does not have those capabilities.'}],result:{output:'Open Runtime and use the local execution host.'}};
+  const storage=new MemoryStorage({'xrai-ui-v4':JSON.stringify(stale),'xrai-ui-v3':JSON.stringify(stale)});
+  assert.equal(purgeStaleUiState(storage),true);
+  assert.equal(storage.getItem('xrai-ui-v4'),null);
   assert.equal(storage.getItem('xrai-ui-v3'),null);
 });
 
