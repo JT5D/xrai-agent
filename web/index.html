@@ -18,7 +18,7 @@
       <div><b>∞</b><span>Self-improving<small>verified gains only</small></span></div>
       <div><b>⌘</b><span>XRAI knowledge<small>promoted skills only</small></span></div>
       <div><b>◇</b><span>No-key modes<small>browser · Ollama · MCP</small></span></div>
-      <div><b>▣</b><span>Visual orchestration<small>inspectable evidence</small></span></div>
+      <div><b>▣</b><span>X-ray provenance<small>inspectable evidence</small></span></div>
     </div>
     <button id="runtimeButton" class="runtime-pill" type="button"><span class="status-dot"></span><span id="health">detecting runtime</span></button>
   </header>
@@ -29,14 +29,14 @@
       <nav class="side-nav" aria-label="Workspace views">
         <button type="button" data-view="workspace" class="active"><span>▦</span>Workspace</button>
         <button type="button" data-view="chat"><span>▢</span>Chat</button>
-        <button type="button" data-view="activity"><span>↻</span>Activity</button>
+        <button type="button" data-view="activity"><span>↻</span>Timeline</button>
         <button type="button" data-view="skills"><span>◇</span>Skills</button>
         <button type="button" data-view="runtime"><span>⌘</span>Runtime</button>
       </nav>
       <div class="agent-card">
         <div><span class="status-dot"></span><strong id="agentState">Agent ready</strong></div>
         <dl>
-          <div><dt>Version</dt><dd>0.3.18</dd></div>
+          <div><dt>Version</dt><dd>0.3.19</dd></div>
           <div><dt>Mode</dt><dd id="modeLabel">detecting</dd></div>
           <div><dt>Persistence</dt><dd>on</dd></div>
           <div><dt>Learning</dt><dd>verified-only</dd></div>
@@ -48,7 +48,7 @@
       <section class="workspace-grid">
         <section class="panel orchestration-panel" id="workspacePanel">
           <div class="panel-header orchestration-head">
-            <div><h1>Agent Orchestration</h1><p>Hover to preview. Click for evidence. Double-click or press E to expand — never hidden chain-of-thought.</p></div>
+            <div><h1>X-ray View</h1><p>God's-eye view of intent → agents → tools → evidence → learning. Hover to preview, click for exact provenance, expand for detail.</p></div>
             <div class="run-controls">
               <span class="live-badge"><span class="status-dot"></span>Live</span>
               <button id="rerun" class="subtle" type="button" disabled>Rerun</button>
@@ -59,7 +59,7 @@
             <div class="graph-legend"><span><i class="running"></i>Running</span><span><i class="done"></i>Completed</span><span><i></i>Pending</span></div>
             <div id="runMeta" class="run-meta">No active run</div>
           </div>
-          <div id="graph" class="graph" aria-live="polite"><div class="empty-state"><span class="empty-mark">△</span><strong>Ready for a task</strong><p>Execution events will build the graph here.</p></div></div>
+          <div id="graph" class="graph" aria-live="polite"><div class="empty-state"><span class="empty-mark">△</span><strong>Ready for a task</strong><p>Execution events will build the X-ray graph here.</p></div></div>
         </section>
 
         <section class="panel chat-panel" id="chatPanel">
@@ -109,7 +109,7 @@
       </section>
 
       <section class="focus-panel panel" id="activityPanel" hidden>
-        <div class="panel-header"><div><h2>Activity</h2><p>Durable execution history restored after refresh.</p></div><button class="subtle back-workspace" type="button">Back to workspace</button></div>
+        <div class="panel-header"><div><h2>Timeline</h2><p>Canonical execution history across the active run — the time axis behind the X-ray view.</p></div><button class="subtle back-workspace" type="button">Back to workspace</button></div>
         <div id="timeline" class="timeline"><div class="empty-state small"><strong>No activity yet.</strong></div></div>
       </section>
 
@@ -139,13 +139,13 @@
     <a class="source-note" style="color:inherit;text-decoration:none" href="https://github.com/JT5D/xrai-agent" target="_blank" rel="noopener noreferrer"><strong>Open source</strong><small>GitHub · JT5D/xrai-agent ↗</small></a>
   </footer>
 
-  <script src="./coi-bootstrap.js?v=0.3.18"></script>
-  <script src="./static-runtime.js?v=0.3.18"></script>
-  <script type="module" src="./input-guard.js?v=0.3.18"></script>
-  <script type="module" src="./browser-enhancements.js?v=0.3.18"></script>
-  <script type="module" src="./event-inspector.js?v=0.3.18"></script>
-  <script type="module" src="./policy-inspector.js?v=0.3.18"></script>
-  <script type="module" src="./improvement-guard.js?v=0.3.18"></script>
-  <script type="module" src="./app.js?v=0.3.18"></script>
+  <script src="./coi-bootstrap.js?v=0.3.19"></script>
+  <script src="./static-runtime.js?v=0.3.19"></script>
+  <script type="module" src="./input-guard.js?v=0.3.19"></script>
+  <script type="module" src="./browser-enhancements.js?v=0.3.19"></script>
+  <script type="module" src="./event-inspector.js?v=0.3.19"></script>
+  <script type="module" src="./policy-inspector.js?v=0.3.19"></script>
+  <script type="module" src="./improvement-guard.js?v=0.3.19"></script>
+  <script type="module" src="./app.js?v=0.3.19"></script>
 </body>
 </html>
