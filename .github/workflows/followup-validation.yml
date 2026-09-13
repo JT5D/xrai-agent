@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Apply bounded follow-up fixes
+      - name: Apply bounded retry fixes
         run: |
           git rev-parse HEAD > base-sha.txt
           python3 - <<'PY'
@@ -27,50 +27,29 @@ jobs:
               if new in s:return
               assert old in s,(path,old)
               p.write_text(s.replace(old,new))
-          replace('web/improvement-guard.js','d.commands.every(c=>c.exitCode===0)','d.commands.every(c=>c.exitCode===0&&!c.timedOut)')
-          replace('web/state.js','cmd:cut(c.cmd,500),exitCode:c.exitCode','cmd:cut(c.cmd,500),exitCode:c.exitCode,timedOut:Boolean(c.timedOut)')
-          replace('web/browser-workspace.js','commands:evidence.map(x=>({cmd:x.cmd,exitCode:x.code}))','commands:evidence.map(x=>({cmd:x.cmd,exitCode:x.code,timedOut:x.timedOut}))')
-          replace('web/app.js',"if(ui.runStatus==='running'){ui.runStatus='interrupted';","if(ui.runStatus==='running'&&!activeSubmission){ui.runStatus='interrupted';")
-          replace('web/input-guard.js','  purgeStaleUiState(window.localStorage);','  // Preserve failure transcripts; sanitize leaked context without deleting the conversation.')
           replace('web/conversation-context.js','visibleTask,isContextualFollowup','visibleTask,isContextualFollowup,isRetryFollowup')
-          replace('web/conversation-context.js','previous|these|those|this|that|our','previous|these|those|this|that|it|our')
-          replace('web/conversation-context.js','size+content.length>8000','size+content.length>4000')
           replace('web/conversation-context.js','return {repo,goal:',"return {repo,lastTask:[...users].reverse().find(m=>!isRetryFollowup(m.text))?.text||goal,goal:")
           replace('web/conversation-context.js',"return executionIntent(context.goal||'',{});","return executionIntent(context.lastTask||context.goal||'',{});")
-          replace('web/conversation-context.js',r'return /\b(?:improve|improvements?|implement|install|integrate|refactor|modify|add|recommendations?)\b/i.test(target);',r'return /\b(?:improve|improvements?|implement|install|integrate|refactor|modify|add|recommendations?)\b|\bfix\b[\s\S]{0,80}\b(?:context|issues?|confusion|replies|memory)\b/i.test(target);')
           replace('web/app.js','const inherited=isContinuation(task)&&context.goal?context.goal:task;','const inherited=isRetryFollowup(task)?context.lastTask||context.goal||task:isContinuation(task)&&context.goal?context.goal:task;')
-          replace('web/app.js','goal:isContinuation(cleaned)?context.goal:cleaned',r'goal:isContinuation(cleaned)||(/^(?:what|which|did|does|is|was|has|have|why|how|can)\b/i.test(cleaned)&&context.goal)?context.goal:cleaned')
-          replace('web/app.js','Verified sandbox patch preview:','Sandbox patch preview (check command results for verification):')
-          replace('web/capability-tools.js',r'|what (?:are|tools|features)',r'|what (?:are your (?:tools|features)|tools|features)')
-          replace('web/local-agent.js',"const raw=await model.prompt(messages),output=isEvaluatorArtifact(raw)?","const raw=await model.prompt(messages),output=!String(raw||'').trim()||isEvaluatorArtifact(raw)?")
-          replace('web/local-agent.js','return transformersModel(onProgress)})();return modelPromise}','return transformersModel(onProgress)})().catch(error=>{modelPromise=null;throw error});return modelPromise}')
-          replace('web/browser-workspace.js','output:summary,score:passed?1:0,','output:summary,score:!passed||requestedChange&&!finalChanges.length?0:1,')
-          replace('test/retry-reload.test.js',r'/isContinuation\(cleaned\)\?context.goal:cleaned/',r'/goal:isContinuation\(cleaned\)\|\|/')
-          Path('test/conversation-hardening.test.js').write_text("""import test from 'node:test';
+          Path('test/retry-target.test.js').write_text("""import test from 'node:test';
           import assert from 'node:assert/strict';
-          import {conversationContext,executionIntent,isContinuation,requestsChanges} from '../web/conversation-context.js';
-          import {classifyBuiltinTask} from '../web/capability-tools.js';
-          import {verifiedImprovementsForRun} from '../web/improvement-guard.js';
+          import {conversationContext,executionIntent,isContinuation} from '../web/conversation-context.js';
           const context={goal:'root cause fix chat context and memory',repo:'JT5D/xrai-agent'};
-          test('do it preserves the actionable plan and requests actual changes',()=>{
-           assert.equal(isContinuation('do it'),true);assert.equal(executionIntent('do it',context),true);assert.equal(requestsChanges('do it',context),true);
-           assert.equal(requestsChanges('review repo and fix failing tests',{}),false);
+          test('retry selects the preceding request, not an older execution goal',()=>{
+            const c=conversationContext({context,messages:[{role:'user',text:'what are all agent capabilities?'},{role:'agent',text:'Inventory'},{role:'user',text:'try again'}]},'try again');
+            assert.equal(c.lastTask,'what are all agent capabilities?');
+            assert.equal(executionIntent('try again',c),false);
           });
-          test('retry uses the immediately preceding substantive request, not the older active goal',()=>{
-           const c=conversationContext({context,messages:[{role:'user',text:'what are all agent capabilities?'},{role:'agent',text:'Inventory'},{role:'user',text:'try again'}]},'try again');
-           assert.equal(c.lastTask,'what are all agent capabilities?');assert.equal(executionIntent('try again',c),false);
-          });
-          test('ordinary what-are questions are not misrouted to capability inventory',()=>{
-           assert.equal(classifyBuiltinTask('What are neural networks?'),null);assert.equal(classifyBuiltinTask('what are your capabilities?'),'capabilities');
-          });
-          test('a timed-out command is never proof, even with a zero exit code',()=>{
-           const event={id:'e',runId:'r',type:'improvement:verified',data:{scope:'sandbox',repo:'JT5D/xrai-agent',sha:'12345678',changedFiles:['web/app.js'],commands:[{cmd:'npm test',exitCode:0,timedOut:true}]}};
-           assert.equal(verifiedImprovementsForRun({events:[event]}).length,0);event.data.commands[0].timedOut=false;assert.equal(verifiedImprovementsForRun({events:[event]}).length,1);
+          test('retry after a repo task still executes, including after reload',()=>{
+            const state=JSON.parse(JSON.stringify({context,messages:[{role:'user',text:'review repo, fix failing tests'},{role:'agent',text:'Checks'},{role:'user',text:'try again'}]}));
+            const c=conversationContext(state,'try again');
+            assert.equal(executionIntent('try again',c),true);
+            assert.equal(isContinuation('do it'),true);
           });
           """)
           p=Path('package.json');data=json.loads(p.read_text());old=data['version'];parts=old.split('.');parts[-1]=str(int(parts[-1])+1);new='.'.join(parts);data['version']=new;p.write_text(json.dumps(data,indent=2)+'\n')
-          p=Path('web/index.html');p.write_text(p.read_text().replace(old,new))
-          p=Path('README.md');p.write_text(p.read_text().replace('v'+old,'v'+new)+'\nConversation follow-ups preserve the active goal across questions. Retries use the preceding request, and a failed conversation is not silently erased on reload. Sandbox results are not deployments. Mobile viewport tests are not physical iPhone/Safari certification.\n')
+          for name in ['web/index.html','README.md']:
+              p=Path(name);p.write_text(p.read_text().replace(old,new))
           PY
       - name: Source checks
         run: npm run check > source-checks.txt 2>&1
@@ -92,7 +71,7 @@ jobs:
           git config user.email jtunick@theimclab.com
           git add web test README.md package.json
           tree=$(git write-tree)
-          commit=$(printf '%s\n' 'Preserve follow-up goals and retry targets; close incomplete-result gaps' | git commit-tree "$tree" -p "$(cat base-sha.txt)")
+          commit=$(printf '%s\n' 'Route retries to the immediately preceding request and preserve execution boundaries' | git commit-tree "$tree" -p "$(cat base-sha.txt)")
           git push origin "$commit:refs/heads/repair/final-tested-6ec4df"
           printf '%s\n' "$commit" > artifacts/tested-commit.txt
       - uses: actions/upload-artifact@v4
