@@ -28,13 +28,14 @@ test('public build links the canonical public XRAI Agent repository',async()=>{
   assert.doesNotMatch(readme,/JT5D\/unrepo/);
 });
 
-test('v0.3.1 public browser has integrated zero-install repo execution',async()=>{
+test('public browser has integrated zero-install repo execution',async()=>{
   const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
   const workspace=await fs.readFile(new URL('../web/browser-workspace.js',import.meta.url),'utf8');
   const html=await fs.readFile(new URL('../web/index.html',import.meta.url),'utf8');
   const bootstrap=await fs.readFile(new URL('../web/coi-bootstrap.js',import.meta.url),'utf8');
   const sw=await fs.readFile(new URL('../web/coi-sw.js',import.meta.url),'utf8');
   assert.match(app,/runBrowserRepoTask/);
+  assert.match(app,/taskNeedsExecutionHost/);
   assert.match(app,/downloadPatch/);
   assert.match(workspace,/@webcontainer\/api@1\.6\.4/);
   assert.match(workspace,/coep:'credentialless'/);
@@ -44,6 +45,8 @@ test('v0.3.1 public browser has integrated zero-install repo execution',async()=
   assert.match(workspace,/Dependency install/);
   assert.match(workspace,/Test verifier/);
   assert.match(html,/coi-bootstrap\.js/);
+  assert.match(html,/browser-enhancements\.js\?v=0\.3\.7/);
+  assert.match(html,/app\.js\?v=0\.3\.7/);
   assert.doesNotMatch(html,/repo-runtime\.js/);
   assert.match(bootstrap,/serviceWorker\.register/);
   assert.match(sw,/Cross-Origin-Opener-Policy/);
