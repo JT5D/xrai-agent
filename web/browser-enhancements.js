@@ -7,6 +7,7 @@ const uid=()=>globalThis.crypto?.randomUUID?.()||`xrai-${Date.now().toString(36)
 const RETRY_PENDING_KEY='xrai-retry-pending-v1';
 const readState=()=>{try{return JSON.parse(localStorage.getItem(UI_STATE_KEY)||'null')}catch{return null}};
 const writeState=state=>{try{localStorage.setItem(UI_STATE_KEY,JSON.stringify({...state,updatedAt:Date.now()}));return true}catch{return false}};
+const runWhenIdle=fn=>{if(typeof requestIdleCallback==='function')requestIdleCallback(fn,{timeout:1200});else setTimeout(fn,0)};
 
 function appendMessage(state,role,text,runId=null){
   const rows=Array.isArray(state.messages)?state.messages:[];
@@ -49,24 +50,15 @@ function queueRetry(task){
 function installPendingRetry(){
   window.addEventListener('DOMContentLoaded',()=>{
     if(sessionStorage.getItem(RETRY_PENDING_KEY)!=='1')return;
-    let attempts=0;
-    const timer=setInterval(()=>{
-      attempts++;
+    const deadline=performance.now()+5000;
+    const tryStart=()=>{
       const button=$('#rerun');
-      if(button&&!button.disabled){
-        clearInterval(timer);
-        sessionStorage.removeItem(RETRY_PENDING_KEY);
-        button.click();
-        return;
-      }
-      if(attempts>=100){
-        clearInterval(timer);
-        sessionStorage.removeItem(RETRY_PENDING_KEY);
-        const state=currentState();
-        state.runStatus='error';state.statusText='retry could not start after app initialization';
-        writeState(state);
-      }
-    },50);
+      if(button&&!button.disabled){sessionStorage.removeItem(RETRY_PENDING_KEY);button.click();return}
+      if(performance.now()<deadline){setTimeout(tryStart,50);return}
+      sessionStorage.removeItem(RETRY_PENDING_KEY);
+      const state=currentState();state.runStatus='error';state.statusText='retry could not start after app initialization';writeState(state);
+    };
+    tryStart();
   });
 }
 
@@ -88,11 +80,13 @@ function installLeakGuard(){
   let repairing=false;
   const check=()=>{
     if(repairing)return;
+    const bubbles=document.querySelectorAll('#messages .msg.agent .bubble p');
+    const latest=bubbles[bubbles.length-1];if(!latest||!isEvaluatorArtifact(latest.textContent||''))return;
     const state=readState();if(!state?.messages?.length)return;
     const last=[...state.messages].reverse().find(m=>m?.role==='agent');if(!last||!isEvaluatorArtifact(last.text))return;
     repairing=true;last.text='Internal evaluator output was blocked because it is not a valid user-facing answer. The run was marked incomplete rather than exposing internal evaluation data.';state.runStatus='error';state.statusText='internal evaluator artifact blocked';if(state.result)state.result={...state.result,output:last.text,score:0};writeState(state);snapshotChat(localStorage,state);setTimeout(()=>location.reload(),0);
   };
-  new MutationObserver(check).observe(document.body,{childList:true,subtree:true});setInterval(check,1200);
+  const messages=$('#messages');if(messages)new MutationObserver(check).observe(messages,{childList:true,subtree:true});queueMicrotask(check);
 }
 
 function injectChatHistory(){
@@ -143,10 +137,10 @@ function selectBranch(chatId,scroll=true){
   host.querySelector('.branch-detail')?.remove();const detail=document.createElement('div');detail.className='branch-detail';const score=node.score==null?'—':`${Math.round(node.score*100)}%`;detail.innerHTML=`<b>${String(node.title).replace(/[<>]/g,'')}</b><br>${node.parentId?'Forked from parent':'Root timeline'} · score ${score} · ${node.attempts??'—'} attempts · ${node.events} events · ${node.provider||'—'}<div class="branch-detail-actions"><button data-act="resume">Resume</button><button data-act="fork">Fork</button>${node.parentId?'<button data-act="compare">Compare parent</button>':''}</div>`;detail.addEventListener('click',event=>{const act=event.target.closest('button')?.dataset.act;if(act==='resume'){if(restoreChat(localStorage,node.id,sessionStorage))location.reload()}else if(act==='fork'){if(forkChat(localStorage,node.id,sessionStorage))location.reload()}else if(act==='compare'){const c=compareChats(localStorage,node.id,node.parentId);if(c){const delta=c.scoreDelta==null?'—':`${c.scoreDelta>=0?'+':''}${Math.round(c.scoreDelta*100)}%`;detail.insertAdjacentHTML('beforeend',`<div style="margin-top:8px"><b>Compared with parent</b><br>score Δ ${delta} · attempts Δ ${c.attemptDelta??'—'} · events Δ ${c.eventDelta>=0?'+':''}${c.eventDelta}</div>`)}}});host.append(detail);if(scroll)canvas.querySelector(`[data-chat-id="${CSS.escape(chatId)}"]`)?.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'})
 }
 function installHistoryJournal(){
-  const initial=readState();ensureActiveChat(localStorage,initial);if(initial)snapshotChat(localStorage,initial);injectChatHistory();
-  let lastStamp=initial?.updatedAt||0;
-  setInterval(()=>{if(isChatTransitioning(sessionStorage))return;const state=readState();if(!state||state.updatedAt===lastStamp)return;lastStamp=state.updatedAt;snapshotChat(localStorage,state);renderChatHistory()},800);
-  window.addEventListener('pagehide',()=>{if(!isChatTransitioning(sessionStorage))snapshotCurrentChat(localStorage)});
+  runWhenIdle(()=>{const initial=readState();ensureActiveChat(localStorage,null);if(initial&&!isChatTransitioning(sessionStorage))snapshotChat(localStorage,initial);injectChatHistory()});
+  const flush=()=>{if(!isChatTransitioning(sessionStorage))snapshotCurrentChat(localStorage)};
+  window.addEventListener('pagehide',flush);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flush()});
 }
 
 installPendingRetry();installBuiltinRouter();installLeakGuard();installHistoryJournal();
