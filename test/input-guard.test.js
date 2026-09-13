@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {contextualizeFollowup,isContextualFollowup,isRetryFollowup,migrateLegacyUiState,purgeStaleUiState,sanitizeTask,stateLooksStale} from '../web/input-guard.js';
+import {contextualizeFollowup,isContextualFollowup,isRetryFollowup,lastMeaningfulUserTask,migrateLegacyUiState,purgeStaleUiState,repairLeakedContextState,sanitizeTask,stateLooksStale,visibleTask} from '../web/input-guard.js';
 
 class MemoryStorage{
   constructor(seed={}){this.map=new Map(Object.entries(seed))}
@@ -39,31 +39,42 @@ test('current stale browser state is purged after execution upgrades',()=>{
   assert.equal(storage.getItem('xrai-ui-v3'),null);
 });
 
-test('question follow-up gets previous run evidence instead of losing context',()=>{
-  const state={lastTask:'review repo, fix failed tests, verify & explain',result:{output:'Verification passed: 27/27 tests.'}};
+test('question follow-up gets previous run evidence internally',()=>{
+  const state={lastTask:'review repo, fix failed tests, verify & explain',messages:[{role:'user',text:'review repo, fix failed tests, verify & explain'}],result:{output:'Verification passed: 27/27 tests.'}};
   const storage=new MemoryStorage({'xrai-ui-v4':JSON.stringify(state)});
   const text=contextualizeFollowup('is it fixed?',storage);
   assert.match(text,/mode: reference/);
   assert.match(text,/27\/27 tests/);
+  assert.equal(visibleTask(text),'is it fixed?');
 });
 
-test('retry followups automatically reuse the prior meaningful task',()=>{
+test('retry followups find the prior meaningful task without changing visible text',()=>{
   const state={
-    lastTask:'try that again',
+    lastTask:'try that again\n\nPrevious XRAI context (mode: retry):\nTask: review repo, fix any failed tests, verify & explain',
     messages:[
       {role:'user',text:'review repo, fix any failed tests, verify & explain'},
-      {role:'assistant',text:'Dependency installation failed.'},
-      {role:'user',text:'try that again'}
+      {role:'agent',text:'Dependency installation failed.'},
+      {role:'user',text:'try that again\n\nPrevious XRAI context (mode: retry):\nTask: review repo, fix any failed tests, verify & explain'}
     ],
     result:{output:'Dependency installation failed.'}
   };
   const storage=new MemoryStorage({'xrai-ui-v4':JSON.stringify(state)});
+  assert.equal(lastMeaningfulUserTask(state),'review repo, fix any failed tests, verify & explain');
   for(const phrase of ['try that again','do it again','retry','rerun','same thing again']){
     assert.equal(isContextualFollowup(phrase),true);
     assert.equal(isRetryFollowup(phrase),true);
     const text=contextualizeFollowup(phrase,storage);
-    assert.match(text,/mode: retry/);
+    assert.equal(visibleTask(text),phrase);
     assert.match(text,/Task: review repo, fix any failed tests, verify & explain/);
-    assert.match(text,/use this context automatically/);
   }
+});
+
+test('leaked internal retry context is repaired out of persisted user messages',()=>{
+  const state={version:4,lastTask:'try again\n\nPrevious XRAI context (mode: retry):\nTask: original task',messages:[{role:'user',text:'original task'},{role:'user',text:'try again\n\nPrevious XRAI context (mode: retry):\nTask: original task'}]};
+  const storage=new MemoryStorage({'xrai-ui-v4':JSON.stringify(state)});
+  assert.equal(repairLeakedContextState(storage),true);
+  const repaired=JSON.parse(storage.getItem('xrai-ui-v4'));
+  assert.equal(repaired.lastTask,'original task');
+  assert.equal(repaired.messages.at(-1).text,'try again');
+  assert.doesNotMatch(JSON.stringify(repaired.messages),/Previous XRAI context/);
 });
