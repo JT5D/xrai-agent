@@ -39,6 +39,12 @@ test('public composer stays inert until app initialization owns form submission'
   assert.match(app,/\$\('#runButton'\)\.disabled=ui\.runStatus==='running'/);
 });
 
+test('browser run state yields before heavyweight execution starts',async()=>{
+  const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
+  assert.match(app,/acceptEvent\(startEvent\);ui\.activeRunId=startEvent\.runId;persist\(\);await sleep\(0\);/);
+  assert.match(app,/try\{if\(mode==='server'\)await runServer\(cleaned\);else await runBrowser\(cleaned\)\}/);
+});
+
 test('built-in browser tools publish persisted results without reloading them away',async()=>{
   const enhancements=await fs.readFile(new URL('../web/browser-enhancements.js',import.meta.url),'utf8');
   const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
