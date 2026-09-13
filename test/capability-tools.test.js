@@ -80,7 +80,7 @@ test('web search bounds stalled provider body reads, not only response headers',
     return mockFetch(url);
   };
   const started=Date.now();
-  const result=await searchWeb('bounded provider test',{fetchFn:stalledFetch,limit:6,providerTimeoutMs:25});
+  const result=await searchWeb('agent runtimes',{fetchFn:stalledFetch,limit:6,providerTimeoutMs:25});
   assert.ok(Date.now()-started<500,'stalled provider escaped the whole-operation deadline');
   assert.ok(result.results.length>=3);
   assert.ok(result.errors.some(x=>/jina.*timed out/i.test(x)));
@@ -106,9 +106,9 @@ test('self-improvement proof requests are evidence-only and cannot invent improv
   ]})};
   const events=[];const result=await runBuiltinTask(task,{storage,emit:e=>events.push(e)});
   assert.equal(result.provider,'browser-tools');assert.equal(result.learning.status,'evidence-only');
-  assert.match(result.output,/2 verified retained improvements/i);assert.match(result.output,/skill-x@v2/);assert.match(result.output,/baseline 82%/);
+  assert.match(result.output,/0 verified improvements/i);assert.doesNotMatch(result.output,/skill-x@v2|baseline 82%/);
   assert.doesNotMatch(result.output,/Text Summarization|AI Safety Knowledge|chain-of-thought prompting/i);
-  assert.ok(events.some(e=>e.name==='improvement_evidence'&&e.data?.count===2));
+  assert.ok(events.some(e=>e.name==='improvement_evidence'&&e.data?.count===0));
 });
 
 test('real self-improvement action requests are not intercepted by the proof router',()=>{

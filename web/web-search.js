@@ -32,7 +32,7 @@ function rankResults(rows,query,limit){
     const exact=entityTerms.length>1&&clean(`${row.title} ${row.snippet} ${row.url}`).toLowerCase().replace(/[^a-z0-9]+/g,'').includes(entityTerms.join(''));
     return{row,index,matches,entityMatches,score:(exact?100:0)+entityMatches*10+matches};
   });
-  const relevant=entityTerms.length>1?scored.filter(item=>item.score>=100||item.entityMatches>=Math.min(2,entityTerms.length)):scored;
+  const relevant=entityTerms.length>1?scored.filter(item=>item.score>=100||item.entityMatches>=Math.min(2,entityTerms.length)):scored.filter(item=>item.matches>0);
   return relevant.sort((a,b)=>b.score-a.score||a.index-b.index).slice(0,limit).map(item=>item.row);
 }
 function providerQuery(query=''){
