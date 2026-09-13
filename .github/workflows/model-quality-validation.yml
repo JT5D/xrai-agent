@@ -1,0 +1,73 @@
+name: Validate fallback model quality
+on:
+  push:
+    branches: [repair/followup-6ec4df]
+    paths: ['.github/workflows/model-quality-validation.yml']
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Prepare bounded candidate
+        run: |
+          git rev-parse HEAD > base-sha.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path('web/local-agent.js');s=p.read_text()
+          for a,b in [('lite=preferFast||constrained','lite=preferFast'),('maxNewTokens:lite?220:420','maxNewTokens:lite||constrained?220:420'),('resolveBrowserModelProfile(navigator,true)','resolveBrowserModelProfile(navigator)')]:
+              assert a in s,a
+              s=s.replace(a,b)
+          p.write_text(s)
+          p=Path('test/static.test.js');s=p.read_text().replace("test('browser chooses a smaller quantized model on mobile, a full model when requested, and a fast fallback'","test('browser uses the stronger model on mobile with a bounded response budget and explicit lite opt-in'").replace('assert.match(mobile.modelId,/135M/)','assert.match(mobile.modelId,/350M/)');p.write_text(s)
+          p=Path('package.json');d=json.loads(p.read_text());old=d['version'];parts=old.split('.');parts[-1]=str(int(parts[-1])+1);new='.'.join(parts);d['version']=new;p.write_text(json.dumps(d,indent=2)+'\n')
+          for name in ['web/index.html','README.md']:
+              p=Path(name);p.write_text(p.read_text().replace(old,new))
+          PY
+      - name: Source checks
+        run: npm run check > source-checks.txt 2>&1
+      - name: Real model preflight
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.55.0
+          cp test/live-pages.e2e.mjs test/model-candidate.e2e.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('test/model-candidate.e2e.mjs');s=p.read_text()
+          needle="  await page.goto(`${base}?e2e=${flow}-${Date.now()}`,{waitUntil:'domcontentloaded',timeout:60_000});"
+          assert needle in s
+          inject="  report.candidateModuleOverride=true;\n  await page.route('**/local-agent.js*',route=>route.fulfill({contentType:'text/javascript',body:fsSync.readFileSync('web/local-agent.js','utf8')}));\n"
+          p.write_text(s.replace(needle,inject+needle))
+          PY
+          xvfb-run -a node test/model-candidate.e2e.mjs https://jt5d.github.io/xrai-agent/ model-runtime
+      - name: Record tested candidate
+        if: success()
+        run: |
+          git config user.name JT5D
+          git config user.email jtunick@theimclab.com
+          git add web/local-agent.js web/index.html README.md package.json test/static.test.js
+          tree=$(git write-tree)
+          commit=$(printf '%s\n' 'Use the existing stronger local model by default; bound mobile output instead of model quality' | git commit-tree "$tree" -p "$(cat base-sha.txt)")
+          git push origin "$commit:refs/heads/repair/model-quality-tested-6ec4df"
+          mkdir -p artifacts
+          printf '%s\n' "$commit" > artifacts/tested-commit.txt
+      - name: Export evidence
+        if: always()
+        run: |
+          mkdir -p artifacts
+          cp source-checks.txt base-sha.txt artifacts/ || true
+          git diff > artifacts/candidate.diff
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fallback-model-validation
+          path: artifacts/
+          retention-days: 7
