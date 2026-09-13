@@ -19,10 +19,16 @@ jobs:
         run: |
           if [ -f .repair.json ]; then
             python3 - <<'PY'
-          import json,hashlib
+          import json,hashlib,gzip,base64
           from pathlib import Path
-          for entry in json.loads(Path('.repair.json').read_text()):
+          payload=json.loads(Path('.repair.json').read_text())
+          if isinstance(payload,dict):
+              raw=gzip.decompress(base64.b64decode(payload['gzip']))
+              assert hashlib.sha256(raw).hexdigest()==payload['sha256']
+              payload=json.loads(raw)
+          for entry in payload:
               p=Path(entry['path'])
+              assert not p.is_absolute() and '..' not in p.parts
               if 'text' in entry:
                   p.parent.mkdir(parents=True,exist_ok=True)
                   p.write_text(entry['text'])
@@ -49,7 +55,7 @@ jobs:
         run: |
           mkdir -p artifacts
           cp source-checks.txt artifacts/ || true
-          tar --exclude=node_modules --exclude=.git --exclude=artifacts -czf artifacts/source.tar.gz package.json src web test knowledge .github
+          tar --exclude=node_modules --exclude=.git --exclude=artifacts -czf artifacts/source.tar.gz README.md package.json src web test knowledge .github
       - name: Create tested commit without repair infrastructure
         if: success()
         run: |
@@ -57,7 +63,7 @@ jobs:
             git config user.name JT5D
             git config user.email jtunick@theimclab.com
             git rm --ignore-unmatch .repair.json .github/workflows/repair-validation.yml
-            git add web test package.json .github/workflows/pages.yml
+            git add web test package.json README.md .github/workflows/pages.yml
             tree=$(git write-tree)
             commit=$(printf '%s\n' 'Fix conversation context, serialized execution, research relevance and evidence integrity' | git commit-tree "$tree" -p 69c3440e4368820147de9ee8c53de6f92cc1fc08)
             git push origin "$commit:refs/heads/repair/conversation-0348-tested"
