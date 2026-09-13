@@ -46,6 +46,7 @@ jobs:
           expected=$(sed -n 's/.*<dt>Version<\/dt><dd>\([^<]*\)<\/dd>.*/\1/p' _site/index.html | head -1)
           test -n "$expected"
           base="${{ steps.deployment.outputs.page_url }}"
+          base="${base/http:/https:}"
           index_url="${base}?sha=${GITHUB_SHA}"
           app_url="${base}app.js?sha=${GITHUB_SHA}"
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
