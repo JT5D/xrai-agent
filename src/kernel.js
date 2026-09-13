@@ -9,7 +9,13 @@ import { runOllamaTask } from './ollama.js';
 const execFileAsync=promisify(execFile);
 const MODEL=()=>process.env.XRAI_MODEL||'gpt-5.6-luna';
 const EFFORT=()=>process.env.XRAI_REASONING||'low';
+const clamp=n=>Math.max(0,Math.min(1,Number(n)||0));
 function workspace(p){return path.resolve(p||process.env.XRAI_WORKSPACE||process.cwd())}
+export function summarizeTrace(events=[]){
+  const rows=Array.isArray(events)?events:[],count=type=>rows.filter(e=>e?.type===type).length;
+  const toolDone=rows.filter(e=>e?.type==='tool:done'),toolErrors=toolDone.filter(e=>e?.data?.ok===false||/^ERROR:/i.test(String(e?.summary||''))).length;
+  return {toolCalls:count('tool:start'),toolErrors,delegations:count('agent:delegate'),knowledgeHits:count('knowledge:hit'),skillHits:count('skill:hit'),events:rows.length};
+}
 export async function primitiveShell(root,command,timeoutMs=120000){
   const cwd=workspace(root);const forbidden=/(^|[;&|]\s*)(sudo\b|rm\s+-rf\s+\/|shutdown\b|reboot\b|mkfs\b|dd\s+if=|:\(\)\s*\{)/i;
   if(forbidden.test(command))throw new Error('Blocked potentially destructive command.');
@@ -34,7 +40,7 @@ export async function runTask(task,opts={}){
   const promotedSkills=await retrieveSkills(root,task,4),meta=await getMetaPolicy(root),skillContext=formatSkills(promotedSkills),metaGuidance=(meta.guidance||[]).join(' ');
   bus.emitEvent(runId,'run:start',task,{data:{workspace:root,model,maxDepth,maxChildren,retries,skills:promotedSkills.map(s=>`${s.id}@v${s.version}`)}});
   for(const s of promotedSkills)bus.emitEvent(runId,'skill:hit',`${s.title} · ${Math.round(s.score*100)}%`,{name:'Promoted skill',data:{id:s.id,version:s.version,score:s.score,confidence:s.confidence}});
-  let attempts=0,finalOutput='',score=0,finalEval=null;
+  let attempts=0,finalOutput='',score=0,finalEval=null,previousScore=null;
   async function runAgent(agentTask,depth=0,parentAgentId){
     const agentId=crypto.randomUUID();let children=0;bus.emitEvent(runId,'agent:start',agentTask,{agentId,parentAgentId,name:depth?'Child agent':'Root agent'});
     let previous_response_id,input=agentTask;
@@ -56,24 +62,27 @@ export async function runTask(task,opts={}){
     }
     throw new Error('Agent exceeded 32 tool turns.');
   }
-  async function evaluate(candidate){
+  async function evaluate(candidate,trace){
     const skillSchema={type:'object',properties:{title:{type:'string'},trigger:{type:'string'},procedure:{type:'string'},verifier:{type:'string'},tags:{type:'array',items:{type:'string'},maxItems:8}},required:['title','trigger','procedure','verifier','tags'],additionalProperties:false};
-    const schema={type:'object',properties:{score:{type:'number',minimum:0,maximum:1},critique:{type:'string'},skill:{...skillSchema}},required:['score','critique','skill'],additionalProperties:false};
-    const r=await response({model,reasoning:{effort:'low'},instructions:`Strictly grade the candidate against the user task. Score 1 only if complete and verified. If and only if a reusable procedure is supported by this run, propose one narrow skill. A skill must contain no secrets or personal data. Use an empty title/trigger/procedure/verifier/tags when no reusable skill is justified. The verifier, when present, should be one safe test/check/lint/build command that directly validates the procedure. ${metaGuidance}`,input:`TASK:\n${task}\n\nCANDIDATE:\n${candidate}`,text:{format:{type:'json_schema',name:'xrai_eval',schema,strict:true}},store:false});
-    const ev=JSON.parse(outputText(r));ev.score=Math.max(0,Math.min(1,Number(ev.score)||0));return ev;
+    const schema={type:'object',properties:{score:{type:'number',minimum:0,maximum:1},pathScore:{type:'number',minimum:0,maximum:1},critique:{type:'string'},pathCritique:{type:'string'},skill:{...skillSchema}},required:['score','pathScore','critique','pathCritique','skill'],additionalProperties:false};
+    const r=await response({model,reasoning:{effort:'low'},instructions:`Strictly grade both the final result and the execution path against the user task. Result score measures completeness and correctness. Path score measures whether the agent used grounded evidence, appropriate tools, verification, and an efficient non-looping route; tool errors or unsupported claims should lower it, while necessary exploration should not. Score 1 only when the result is complete and the path is well-grounded and verified. If and only if a reusable procedure is supported by this run, propose one narrow skill. A skill must contain no secrets or personal data. Use an empty title/trigger/procedure/verifier/tags when no reusable skill is justified. The verifier, when present, should be one safe test/check/lint/build command that directly validates the procedure. ${metaGuidance}`,input:`TASK:\n${task}\n\nCANDIDATE:\n${candidate}\n\nEXECUTION TRACE SUMMARY:\n${JSON.stringify(trace)}`,text:{format:{type:'json_schema',name:'xrai_eval',schema,strict:true}},store:false});
+    const ev=JSON.parse(outputText(r));ev.score=clamp(ev.score);ev.pathScore=clamp(ev.pathScore);ev.compositeScore=Math.min(ev.score,ev.pathScore+.15);return ev;
   }
   let feedback='';
   while(attempts<=retries){
-    attempts++;finalOutput=await runAgent(feedback?`${task}\n\nEvaluator feedback from the previous attempt:\n${feedback}\nFix only the identified gaps.`:task);finalEval=await evaluate(finalOutput);score=finalEval.score;bus.emitEvent(runId,'eval',`Score ${Math.round(score*100)}% — ${finalEval.critique}`,{name:'Evaluator',data:finalEval});
-    if(score>=meta.minScore||attempts>retries)break;feedback=finalEval.critique;bus.emitEvent(runId,'retry',feedback,{data:{attempt:attempts+1}})
+    attempts++;const eventStart=bus.forRun(runId).length;finalOutput=await runAgent(feedback?`${task}\n\nEvaluator feedback from the previous attempt:\n${feedback}\nFix only the identified gaps.`:task);const trace=summarizeTrace(bus.forRun(runId).slice(eventStart));finalEval=await evaluate(finalOutput,trace);score=finalEval.compositeScore;bus.emitEvent(runId,'eval',`Result ${Math.round(finalEval.score*100)}% · path ${Math.round(finalEval.pathScore*100)}% · composite ${Math.round(score*100)}% — ${finalEval.critique}`,{name:'Evaluator',data:{...finalEval,trace}});
+    if(previousScore===null)bus.emitEvent(runId,'improvement:baseline',`Baseline ${Math.round(score*100)}%`,{name:'Improvement loop',data:{score,attempt:attempts}});
+    else if(score>previousScore+.005)bus.emitEvent(runId,'improvement:accept',`Improved ${Math.round((score-previousScore)*100)} points to ${Math.round(score*100)}%`,{name:'Improvement loop',data:{score,previousScore,attempt:attempts}});
+    else{bus.emitEvent(runId,'improvement:stop',`No meaningful gain (${Math.round(previousScore*100)}% → ${Math.round(score*100)}%); stopping to avoid waste.`,{name:'Improvement loop',data:{score,previousScore,attempt:attempts}});break}
+    if(score>=meta.minScore||attempts>retries)break;previousScore=score;feedback=`${finalEval.critique}\nExecution-path critique: ${finalEval.pathCritique}`;bus.emitEvent(runId,'retry',feedback,{data:{attempt:attempts+1,previousScore}})
   }
   await recordSkillUsage(root,promotedSkills,score);
   let learning={status:'disabled'};
   if(learn&&score>=meta.minScore&&finalEval?.skill){
     learning=await observeSkillCandidate(root,finalEval.skill,{task,score,verify:cmd=>primitiveShell(root,cmd,120000)});
     const title=learning.skill?.title||finalEval.skill.title||'Skill';
-    bus.emitEvent(runId,`skill:${learning.status}`,`${title} — ${learning.reason}`,{name:'Skill gate',data:{id:learning.id,version:learning.version,status:learning.status,verified:learning.verified,supportCount:learning.supportCount}});
+    bus.emitEvent(runId,`skill:${learning.status}`,`${title} — ${learning.reason}`,{name:'Skill gate',data:{id:learning.id,version:learning.version,status:learning.status,verified:learning.verified,supportCount:learning.supportCount,baseline:learning.baseline,candidateScore:learning.candidateScore}});
   }
   const maintenance=await recordRunOutcome(root,{task,score,skills:promotedSkills,candidateDecision:learning});if(maintenance)bus.emitEvent(runId,'meta:update',`Meta-skill v${maintenance.meta.version} · avg score ${Math.round(maintenance.meta.metrics.avgScore*100)}%${maintenance.actions.length?` · ${maintenance.actions.join(', ')}`:''}`,{name:'Slow learning loop',data:maintenance});
-  bus.emitEvent(runId,'run:done',finalOutput.slice(0,1200),{data:{score,attempts,learning:learning.status}});return{runId,output:finalOutput,score,attempts,learning,events:bus.forRun(runId)}
+  bus.emitEvent(runId,'run:done',finalOutput.slice(0,1200),{data:{score,attempts,learning:learning.status,pathScore:finalEval?.pathScore}});return{runId,output:finalOutput,score,attempts,learning,events:bus.forRun(runId)}
 }
