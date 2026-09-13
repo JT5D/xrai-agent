@@ -96,9 +96,9 @@ function renderGraph(){
   const rows=activeEvents();const graph=$('#graph');
   if(!rows.length){graph.innerHTML='<div class="empty-state"><span class="empty-mark">△</span><strong>Ready for a task</strong><p>Execution events will build the graph here.</p></div>';return}
   graph.innerHTML='';const nodes=[];const byId=new Map();let rootAgent=null;
-  const add=(id,title,parent,k,summary,running=false)=>{
-    if(!byId.has(id)){const n={id,title,parent,k,summary,running};byId.set(id,n);nodes.push(n)}
-    else{const n=byId.get(id);n.summary=summary||n.summary;n.running=running}
+  const add=(id,title,parent,k,summary,running=false,eventId=null)=>{
+    if(!byId.has(id)){const n={id,title,parent,k,summary,running,eventId};byId.set(id,n);nodes.push(n)}
+    else{const n=byId.get(id);n.summary=summary||n.summary;n.running=running;n.eventId=eventId||n.eventId}
   };
   for(const ev of rows){
     const k=kind(ev);let id=null,title=null,parent=null;
@@ -111,13 +111,13 @@ function renderGraph(){
     else if(ev.type.startsWith('tool:')){id=`tool:${ev.name||'tool'}`;title=ev.name||'Tool';parent=ev.agentId?`agent:${ev.agentId}`:(rootAgent||'goal')}
     else if(ev.agentId){id=`agent:${ev.agentId}`;title=ev.name||'Agent';parent=ev.parentAgentId?`agent:${ev.parentAgentId}`:'goal';if(!ev.parentAgentId&&!rootAgent)rootAgent=id}
     if(!id)continue;
-    add(id,title,parent,k,ev.summary,ev.type.endsWith(':start')||ev.type==='agent:delegate');
+    add(id,title,parent,k,ev.summary,ev.type.endsWith(':start')||ev.type==='agent:delegate',ev.id);
     if(ev.type.endsWith(':done')||ev.type==='eval'||ev.type==='capability:blocked')byId.get(id).running=false;
   }
   const depth=id=>{let d=0,n=byId.get(id),guard=0;while(n?.parent&&guard++<10){d++;n=byId.get(n.parent)}return Math.min(d,4)};
   const layers=new Map();for(const n of nodes){const d=depth(n.id);if(!layers.has(d))layers.set(d,[]);layers.get(d).push(n)}
   const width=Math.max(graph.clientWidth,690),colW=Math.max(190,width/5),pos=new Map();
-  for(const [d,layer] of layers){layer.forEach((n,i)=>{const total=layer.length,rowGap=96,startY=Math.max(24,240-(total-1)*rowGap/2),x=24+d*colW,y=startY+i*rowGap;pos.set(n.id,{x,y});const el=document.createElement('div');el.className=`node ${n.k}${n.running?' running':''}`;el.style.left=`${x}px`;el.style.top=`${y}px`;const kd=document.createElement('div');kd.className='kind';kd.textContent=n.k;const ti=document.createElement('div');ti.className='title';ti.textContent=n.title;const sm=document.createElement('div');sm.className='summary';sm.textContent=n.summary||'';el.append(kd,ti,sm);graph.append(el)})}
+  for(const [d,layer] of layers){layer.forEach((n,i)=>{const total=layer.length,rowGap=96,startY=Math.max(24,240-(total-1)*rowGap/2),x=24+d*colW,y=startY+i*rowGap;pos.set(n.id,{x,y});const el=document.createElement('div');el.className=`node ${n.k}${n.running?' running':''}`;el.style.left=`${x}px`;el.style.top=`${y}px`;el.dataset.nodeId=n.id;if(n.eventId)el.dataset.eventId=n.eventId;const kd=document.createElement('div');kd.className='kind';kd.textContent=n.k;const ti=document.createElement('div');ti.className='title';ti.textContent=n.title;const sm=document.createElement('div');sm.className='summary';sm.textContent=n.summary||'';el.append(kd,ti,sm);graph.append(el)})}
   for(const n of nodes){if(!n.parent||!pos.has(n.parent)||!pos.has(n.id))continue;const a=pos.get(n.parent),b=pos.get(n.id),x1=a.x+176,y1=a.y+29,x2=b.x,y2=b.y+29,dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy);const edge=document.createElement('div');edge.className='edge';edge.style.left=`${x1}px`;edge.style.top=`${y1}px`;edge.style.width=`${len}px`;edge.style.transform=`rotate(${Math.atan2(dy,dx)}rad)`;graph.append(edge)}
 }
 function renderActivity(){
