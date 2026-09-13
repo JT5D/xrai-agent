@@ -22,5 +22,5 @@ function render(){
   html+='<h3>What code does not decide</h3><p class="policy-empty">No keyword classifier promotes “fast”, “deep”, “breadth”, or “efficient” reasoning modes. Those semantic choices belong to the model; this view records outcomes rather than pretending the runtime can out-reason it.</p>';
   body.innerHTML=html;
 }
-function install(){ensure();ingestPolicyOutcomes(localStorage);setInterval(()=>{ingestPolicyOutcomes(localStorage);if(!document.querySelector('#policyInspector')?.hidden)render()},3000)}
+function install(){ensure()}
 install();
