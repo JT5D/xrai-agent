@@ -15,6 +15,11 @@ test('repo and test tasks require an execution host while ordinary chat does not
   assert.equal(taskNeedsExecutionHost('Explain evidence-gated skill learning simply'),false);
 });
 
+test('context injected for a vague follow-up does not accidentally rerun repo execution',()=>{
+  const followup='is it fixed?\n\nPrevious XRAI context (use this evidence; do not ask what "it" refers to):\nTask: review repo, fix any failed tests, verify & explain\nResult: npm test PASS';
+  assert.equal(taskNeedsExecutionHost(followup),false);
+});
+
 test('UI state v4 survives a reload with task, messages, events, and running status intact',()=>{
   const storage=new MemoryStorage(),state=defaultUiState();
   assert.equal(UI_STATE_VERSION,4);
