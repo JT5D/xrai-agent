@@ -18,6 +18,21 @@ Live no-key browser build:
 https://jt5d.github.io/xrai-agent/
 ```
 
+Canonical public source:
+
+```text
+https://github.com/JT5D/xrai-agent
+```
+
+Quick start:
+
+```bash
+git clone https://github.com/JT5D/xrai-agent.git
+cd xrai-agent
+npm run check
+node src/cli.js web
+```
+
 ## What changed in v0.2.1
 
 v0.2.1 keeps the evidence-gated learning architecture and hardens the browser runtime after real mobile testing:
