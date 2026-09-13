@@ -1,8 +1,10 @@
 import { classifyBuiltinTask,isEvaluatorArtifact,runBuiltinTask } from './capability-tools.js';
 import { ACTIVE_CHAT_KEY,UI_STATE_KEY,ensureActiveChat,listChats,newChat,restoreChat,snapshotChat,snapshotCurrentChat } from './conversation-store.js';
+import { isRetryFollowup,lastMeaningfulUserTask,visibleTask } from './input-guard.js';
 
 const $=s=>document.querySelector(s);
 const uid=()=>globalThis.crypto?.randomUUID?.()||`xrai-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
+const RETRY_PENDING_KEY='xrai-retry-pending-v1';
 const readState=()=>{try{return JSON.parse(localStorage.getItem(UI_STATE_KEY)||'null')}catch{return null}};
 const writeState=state=>{try{localStorage.setItem(UI_STATE_KEY,JSON.stringify({...state,updatedAt:Date.now()}));return true}catch{return false}};
 
@@ -30,10 +32,39 @@ async function executeBuiltin(task){
   }
 }
 
+function queueRetry(task){
+  const state=currentState(),prior=lastMeaningfulUserTask(state);
+  if(!prior)return false;
+  appendMessage(state,'user',visibleTask(task),null);
+  state.lastTask=prior;
+  state.runStatus='idle';
+  state.statusText='retrying previous task';
+  writeState(state);
+  snapshotChat(localStorage,state,ensureActiveChat(localStorage,state));
+  sessionStorage.setItem(RETRY_PENDING_KEY,'1');
+  location.reload();
+  return true;
+}
+
+function installPendingRetry(){
+  window.addEventListener('DOMContentLoaded',()=>{
+    if(sessionStorage.getItem(RETRY_PENDING_KEY)!=='1')return;
+    sessionStorage.removeItem(RETRY_PENDING_KEY);
+    const run=()=>{const button=$('#rerun');if(button&&!button.disabled){button.click();return true}return false};
+    if(!run())setTimeout(run,80);
+  });
+}
+
 function installBuiltinRouter(){
   document.addEventListener('submit',event=>{
     const form=event.target;if(!(form instanceof HTMLFormElement)||form.id!=='chatForm')return;
-    const task=$('#task')?.value?.trim()||'';if(!task||!classifyBuiltinTask(task))return;
+    const task=visibleTask($('#task')?.value||'');if(!task)return;
+    if(isRetryFollowup(task)){
+      const prior=lastMeaningfulUserTask(currentState());
+      if(!prior)return;
+      event.preventDefault();event.stopImmediatePropagation();if($('#task'))$('#task').value='';queueRetry(task);return;
+    }
+    if(!classifyBuiltinTask(task))return;
     event.preventDefault();event.stopImmediatePropagation();if($('#task'))$('#task').value='';executeBuiltin(task);
   },true);
 }
@@ -71,4 +102,4 @@ function installHistoryJournal(){
   window.addEventListener('pagehide',()=>snapshotCurrentChat(localStorage));
 }
 
-installBuiltinRouter();installLeakGuard();installHistoryJournal();
+installPendingRetry();installBuiltinRouter();installLeakGuard();installHistoryJournal();
