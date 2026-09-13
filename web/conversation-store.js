@@ -1,11 +1,16 @@
+import { normalizeUiState } from './state.js';
+
 export const CHATS_KEY='xrai-chats-v1';
 export const ACTIVE_CHAT_KEY='xrai-active-chat-v1';
 export const UI_STATE_KEY='xrai-ui-v4';
 export const CHAT_SWITCH_KEY='xrai-chat-switch-v1';
 const MAX_CHATS=24;
+const MAX_CHAT_STORE_CHARS=3500000;
 
 const id=()=>globalThis.crypto?.randomUUID?.()||`chat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`;
-const parse=(storage,key,fallback)=>{try{return JSON.parse(storage?.getItem(key)||'null')??fallback}catch{return fallback}};
+const rawValue=(storage,key)=>{try{return storage?.getItem(key)||''}catch{return''}};
+const parse=(storage,key,fallback)=>{try{const raw=rawValue(storage,key);return raw?JSON.parse(raw):fallback}catch{return fallback}};
+const chatStoreOversized=storage=>rawValue(storage,CHATS_KEY).length>MAX_CHAT_STORE_CHARS;
 const titleFor=state=>{
   const first=(state?.messages||[]).find(m=>m?.role==='user'&&String(m.text||'').trim());
   const text=String(first?.text||state?.lastTask||'New chat').replace(/\s+/g,' ').trim();
@@ -15,10 +20,11 @@ function beginTransition(transitionStorage,chatId){try{transitionStorage?.setIte
 export function isChatTransitioning(transitionStorage=globalThis.sessionStorage){try{return Boolean(transitionStorage?.getItem(CHAT_SWITCH_KEY))}catch{return false}}
 export function finishChatTransition(transitionStorage=globalThis.sessionStorage){try{transitionStorage?.removeItem(CHAT_SWITCH_KEY)}catch{}}
 export function compactState(state={}){
-  const result=state.result&&typeof state.result==='object'?{...state.result,diff:String(state.result.diff||'').slice(0,50000)}:null;
-  return {...state,messages:Array.isArray(state.messages)?state.messages.slice(-100):[],events:Array.isArray(state.events)?state.events.slice(-220):[],result,updatedAt:Date.now()};
+  const normalized=normalizeUiState({...state,version:4});
+  return {...normalized,messages:normalized.messages.slice(-100),events:normalized.events.slice(-220),updatedAt:Date.now()};
 }
 export function listChats(storage=globalThis.localStorage){
+  if(chatStoreOversized(storage))return[];
   const rows=parse(storage,CHATS_KEY,[]);
   return Array.isArray(rows)?rows.filter(x=>x&&x.id&&x.state).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,MAX_CHATS):[];
 }
@@ -30,6 +36,7 @@ function writeChats(storage,rows){
 }
 export function ensureActiveChat(storage=globalThis.localStorage,state=null){
   let active=storage?.getItem(ACTIVE_CHAT_KEY)||'';
+  if(chatStoreOversized(storage))return active||null;
   const rows=listChats(storage);
   if(active&&rows.some(x=>x.id===active))return active;
   active=id();try{storage?.setItem(ACTIVE_CHAT_KEY,active)}catch{}
@@ -37,13 +44,14 @@ export function ensureActiveChat(storage=globalThis.localStorage,state=null){
   return active;
 }
 export function snapshotChat(storage=globalThis.localStorage,state=null,chatId=null){
-  if(!state||typeof state!=='object')return null;
-  const active=chatId||ensureActiveChat(storage);
+  if(!state||typeof state!=='object'||chatStoreOversized(storage))return null;
+  const active=chatId||ensureActiveChat(storage);if(!active)return null;
   const rows=listChats(storage),previous=rows.find(x=>x.id===active),compact=compactState(state);
   const row={id:active,title:titleFor(compact),createdAt:previous?.createdAt||Date.now(),updatedAt:Date.now(),state:compact,parentId:previous?.parentId||null,rootId:previous?.rootId||active,forkedAt:previous?.forkedAt||null};
   writeChats(storage,[row,...rows.filter(x=>x.id!==active)]);return row;
 }
 export function snapshotCurrentChat(storage=globalThis.localStorage){
+  if(chatStoreOversized(storage))return null;
   const state=parse(storage,UI_STATE_KEY,null);if(!state)return null;
   return snapshotChat(storage,state,ensureActiveChat(storage,state));
 }
@@ -97,6 +105,7 @@ export function branchLineage(rows=[],chatId){
   return{ancestors,descendants};
 }
 export function deleteChat(storage=globalThis.localStorage,chatId){
+  if(chatStoreOversized(storage))return[];
   const rows=listChats(storage).filter(x=>x.id!==chatId);writeChats(storage,rows);
   if(storage?.getItem(ACTIVE_CHAT_KEY)===chatId){try{storage.removeItem(ACTIVE_CHAT_KEY)}catch{}}
   return rows;
