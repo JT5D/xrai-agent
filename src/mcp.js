@@ -7,6 +7,7 @@ const PACKAGE=JSON.parse(readFileSync(new URL('../package.json',import.meta.url)
 const SERVER_INFO={name:'xrai-agent',version:PACKAGE.version};
 const MODERN_VERSION='2026-07-28';
 const LEGACY_VERSION='2025-11-25';
+const TOOL_LIST_TTL_MS=300_000;
 const INSTRUCTIONS='Use XRAI tools for workspace execution, evidence-gated skill retrieval/inspection, or the complete recursive agent. Promoted skills are reusable hypotheses; verification evidence outranks memory.';
 const SERVER_INFO_META_KEY='io.modelcontextprotocol/serverInfo';
 const PROTOCOL_VERSION_META_KEY='io.modelcontextprotocol/protocolVersion';
@@ -29,7 +30,7 @@ export async function handleRpc(msg){
     if(msg?.method==='initialize')return ok(id,{protocolVersion:msg.params?.protocolVersion||LEGACY_VERSION,capabilities:{tools:{listChanged:false}},serverInfo:SERVER_INFO,instructions:INSTRUCTIONS});
     if(msg?.method==='notifications/initialized'||msg?.method==='notifications/cancelled')return null;
     if(msg?.method==='ping')return ok(id,{},modern);
-    if(msg?.method==='tools/list')return ok(id,{tools:MCP_TOOLS},modern);
+    if(msg?.method==='tools/list')return ok(id,modern?{tools:MCP_TOOLS,ttlMs:TOOL_LIST_TTL_MS,cacheScope:'public'}:{tools:MCP_TOOLS},modern);
     if(msg?.method==='tools/call'){
       const {name,arguments:a={}}=msg.params||{};let text;
       if(name==='xrai_run'){const r=await runTask(a.task,{workspace:a.workspace});text=JSON.stringify({output:r.output,score:r.score,runId:r.runId,learning:r.learning},null,2)}
