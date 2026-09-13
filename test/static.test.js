@@ -75,6 +75,15 @@ test('public graph ships exact provenance binding plus interactive X-ray inspect
   assert.match(html,/X-ray View/);assert.match(html,/God's-eye view/);assert.match(history,/Time Travel/);
 });
 
+test('browser enhancement layer has no perpetual main-thread polling',async()=>{
+  const history=await fs.readFile(new URL('../web/browser-enhancements.js',import.meta.url),'utf8');
+  assert.doesNotMatch(history,/setInterval/);
+  assert.match(history,/requestIdleCallback/);
+  assert.match(history,/visibilitychange/);
+  assert.match(history,/MutationObserver/);
+  assert.match(history,/#messages \.msg\.agent \.bubble p/);
+});
+
 test('public browser has integrated zero-install repo execution',async()=>{
   const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
   const workspace=await fs.readFile(new URL('../web/browser-workspace.js',import.meta.url),'utf8');
