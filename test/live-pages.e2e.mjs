@@ -8,7 +8,7 @@ const base=rawBase.replace(/^http:/,'https:').replace(/\/?$/,'/');
 const artifacts='artifacts';
 await fs.mkdir(artifacts,{recursive:true});
 const reportPath=`${artifacts}/live-e2e-${flow}.json`;
-const report={base,flow,startedAt:new Date().toISOString(),phase:'starting',flows:{},consoleErrors:[],pageErrors:[]};
+const report={base,flow,startedAt:new Date().toISOString(),phase:'starting',flows:{},consoleErrors:[],pageErrors:[],submitProbes:[],navigations:[]};
 let browser;
 let page;
 
@@ -39,11 +39,39 @@ async function waitForNewResult(oldRun,timeout){
   }
   throw new Error(`Timed out waiting for a new completed run after ${Math.round(timeout/1000)}s`);
 }
+async function waitForTaskRegistration(text,timeout=3000){
+  const end=Date.now()+timeout;
+  while(Date.now()<end){
+    try{
+      const s=await state();
+      if(s?.lastTask===text||s?.messages?.some(m=>m?.role==='user'&&m?.text===text)||s?.runStatus==='running')return s;
+    }catch{}
+    await page.waitForTimeout(100);
+  }
+  return null;
+}
 async function submit(text,timeout){
   await waitForReady();
   const before=await state(),oldRun=before?.result?.runId||null;
+  const probe={text,hrefBefore:page.url(),beforeState:before};
+  await page.evaluate(()=>{
+    globalThis.__xraiE2EProbe={clicks:0,submits:0};
+    document.querySelector('#runButton')?.addEventListener('click',()=>globalThis.__xraiE2EProbe.clicks++,true);
+    document.querySelector('#chatForm')?.addEventListener('submit',()=>globalThis.__xraiE2EProbe.submits++,true);
+  });
   await page.locator('#task').fill(text);
+  probe.beforeClick=await page.evaluate(()=>({value:document.querySelector('#task')?.value||'',disabled:Boolean(document.querySelector('#runButton')?.disabled),mode:document.querySelector('#modeLabel')?.textContent?.trim()||'',probe:globalThis.__xraiE2EProbe||null}));
   await page.locator('#runButton').click({noWaitAfter:true});
+  let registered=await waitForTaskRegistration(text,3000);
+  probe.afterClick={href:page.url(),state:await state().catch(()=>null),dom:await page.evaluate(()=>({value:document.querySelector('#task')?.value||'',disabled:Boolean(document.querySelector('#runButton')?.disabled),probe:globalThis.__xraiE2EProbe||null})).catch(()=>null),registered:Boolean(registered)};
+  if(!registered){
+    await page.locator('#chatForm').evaluate(form=>form.requestSubmit());
+    const requestRegistered=await waitForTaskRegistration(text,3000);
+    probe.afterRequestSubmit={href:page.url(),state:await state().catch(()=>null),dom:await page.evaluate(()=>({value:document.querySelector('#task')?.value||'',disabled:Boolean(document.querySelector('#runButton')?.disabled),probe:globalThis.__xraiE2EProbe||null})).catch(()=>null),registered:Boolean(requestRegistered)};
+    report.submitProbes.push(probe);checkpoint('submit:not-registered');
+    throw new Error(`User click did not register task state within 3s; requestSubmit registered=${Boolean(requestRegistered)}`);
+  }
+  report.submitProbes.push(probe);checkpoint('submit:registered');
   return waitForNewResult(oldRun,timeout);
 }
 function require(condition,message){if(!condition)throw new Error(message)}
@@ -118,6 +146,7 @@ try{
   page=await context.newPage();
   page.on('console',msg=>{if(msg.type()==='error')report.consoleErrors.push(msg.text())});
   page.on('pageerror',error=>report.pageErrors.push(String(error?.stack||error)));
+  page.on('framenavigated',frame=>{if(frame===page.mainFrame()){report.navigations.push({url:frame.url(),ts:new Date().toISOString()});checkpoint('navigation')}});
 
   await page.goto(`${base}?e2e=${flow}-${Date.now()}`,{waitUntil:'domcontentloaded',timeout:60_000});
   await page.waitForSelector('#task',{timeout:60_000});
