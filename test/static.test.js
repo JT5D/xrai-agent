@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import { checkChromeModelAvailability,compoundingMetrics,extractEval,selectBrowserModelProfile } from '../web/local-agent.js';
+import { checkChromeModelAvailability,compoundingMetrics,extractEval,selectBrowserModelProfile,withWebGpuFallback } from '../web/local-agent.js';
 import { formatVerifiedImprovementReport,requestedImprovementCount,shouldGuardImprovementClaim,verifiedImprovementsForRun } from '../web/improvement-guard.js';
 
 test('static Pages build has no-key local inference and evidence-gated skill learning',async()=>{
@@ -16,6 +16,24 @@ test('Chrome built-in AI readiness is bounded and falls back when availability n
   const result=await checkChromeModelAvailability({availability:()=>new Promise(()=>{})},{},20);
   assert.deepEqual(result,{status:'unavailable',timedOut:true});
   assert.ok(Date.now()-started<250,'Chrome availability escaped its bounded readiness gate');
+});
+
+test('browser local model retries WASM when a claimed WebGPU backend is unusable',async()=>{
+  const calls=[],progress=[];
+  const result=await withWebGpuFallback(async profile=>{
+    calls.push({...profile});
+    if(profile.device==='webgpu')throw new Error('Failed to get GPU adapter');
+    return profile;
+  },{device:'webgpu',dtype:'q4f16',modelId:'test-model',label:'test'},message=>progress.push(message));
+  assert.deepEqual(calls.map(x=>x.device),['webgpu','wasm']);
+  assert.equal(result.device,'wasm');assert.equal(result.dtype,'q4');
+  assert.match(progress.join(' '),/retrying with WASM/i);
+});
+
+test('live deployed E2E stops waiting as soon as the app records an error',async()=>{
+  const e2e=await fs.readFile(new URL('./live-pages.e2e.mjs',import.meta.url),'utf8');
+  assert.match(e2e,/runStatus==='error'\)return true/);
+  assert.match(e2e,/runStatus==='completed'&&s\?\.result\?\.runId/);
 });
 
 test('browser evaluator parse failure is fail-closed and cannot promote learning',()=>{
