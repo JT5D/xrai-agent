@@ -18,13 +18,16 @@ test('web UI ships X-ray provenance, chat, status, timeline, skills, and runtime
 test('web UI exposes durable recovery, zero-install repo execution, and patch download',async()=>{
   const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
   const html=await fs.readFile(new URL('../web/index.html',import.meta.url),'utf8');
+  const bootstrap=await fs.readFile(new URL('../web/coi-bootstrap.js',import.meta.url),'utf8');
   assert.match(app,/loadUiState/);
   assert.match(app,/taskNeedsExecutionHost/);
   assert.match(app,/runBrowserRepoTask/);
   assert.match(app,/downloadPatch/);
   assert.match(html,/Run recovered after a page reload/);
   assert.match(html,/verified patch output/i);
-  assert.match(html,/browser-enhancements\.js\?v=\d+\.\d+\.\d+/);
+  assert.match(bootstrap,/browser-enhancements\.js/);
+  assert.match(bootstrap,/app\.js/);
+  assert.doesNotMatch(html,/type="module"/);
   assert.doesNotMatch(html,/repo-runtime\.js/);
 });
 
