@@ -1,0 +1,36 @@
+name: Pinned runtime reference
+on:
+  push:
+    branches: [repair/runtime-reference-2347]
+permissions:
+  contents: read
+jobs:
+  reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [cpu, gpu, precision]
+    env:
+      PROFILE: ${{ matrix.profile }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save --ignore-scripts playwright@1.56.1
+      - name: Preserve exact source
+        run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/commit.txt
+          git archive --format=tar.gz --output=artifacts/source.tar.gz HEAD
+      - run: node test/runtime-reference.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reference-${{ matrix.profile }}
+          path: artifacts/
+          retention-days: 7
