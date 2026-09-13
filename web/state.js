@@ -1,5 +1,5 @@
-export const UI_STATE_KEY='xrai-ui-v3';
-export const UI_STATE_VERSION=3;
+export const UI_STATE_KEY='xrai-ui-v4';
+export const UI_STATE_VERSION=4;
 
 const HOST_PATTERNS=[
   /\b(repo|repository|codebase|github|git)\b/i,
