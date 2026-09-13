@@ -71,7 +71,7 @@ test('public graph ships exact provenance binding plus interactive X-ray inspect
   const history=await fs.readFile(new URL('../web/browser-enhancements.js',import.meta.url),'utf8');
   assert.match(app,/eventId/);assert.match(app,/dataset\.eventId/);assert.match(inspector,/events\.find\(e=>e\.id===n\.dataset\.eventId\)/);assert.match(inspector,/X-ray provenance/);
   assert.match(inspector,/graph-tooltip/);assert.match(inspector,/dblclick/);assert.match(inspector,/toggleExpanded/);assert.match(inspector,/fitGraph/);assert.match(inspector,/pointerdown/);assert.match(inspector,/aria-label/);assert.match(inspector,/highlightPath/);
-  assert.match(policy,/Model-led orchestration evidence/);assert.match(policy,/Model decides; runtime constrains/);assert.match(policy,/What code does not decide/);assert.doesNotMatch(policy,/setInterval/);
+  assert.match(policy,/Model-led orchestration evidence/);assert.match(policy,/Model decides; runtime constrains/);assert.match(policy,/What code does not decide/);assert.doesNotMatch(policy,/setInterval/);assert.doesNotMatch(policy,/ingestPolicyOutcomes/);
   assert.match(html,/X-ray View/);assert.match(html,/God's-eye view/);assert.match(history,/Time Travel/);
 });
 
