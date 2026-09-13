@@ -47,6 +47,14 @@ test('browser run state crosses a paint boundary before heavyweight execution st
   assert.match(app,/try\{if\(mode==='server'\)await runServer\(cleaned\);else await runBrowser\(cleaned\)\}/);
 });
 
+test('X-ray observer decoration is idempotent and cannot recursively rewrite its observed subtree',async()=>{
+  const inspector=await fs.readFile(new URL('../web/event-inspector.js',import.meta.url),'utf8');
+  assert.match(inspector,/new MutationObserver/);
+  assert.match(inspector,/const next=\[event\.type,event\.status,evidence\.join\('\\n'\)\]/);
+  assert.match(inspector,/if\(more\.textContent!==next\)more\.textContent=next/);
+  assert.doesNotMatch(inspector,/more\.textContent=\[event\.type,event\.status,evidence\.join\('\\n'\)\]/);
+});
+
 test('built-in browser tools publish persisted results without reloading them away',async()=>{
   const enhancements=await fs.readFile(new URL('../web/browser-enhancements.js',import.meta.url),'utf8');
   const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
