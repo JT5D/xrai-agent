@@ -1,0 +1,59 @@
+name: Final public verification
+on:
+  push:
+    branches: [verify/public-final-20260913]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        flow: [conversation, chat-retry, mobile-chat, mobile-repo, model-runtime, web, repo]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify exact deployed source snapshot
+        run: |
+          mkdir -p artifacts
+          git rev-parse HEAD^ > artifacts/source-commit.txt
+          for file in index.html app.js conversation-context.js local-agent.js browser-workspace.js; do
+            expected=$(sha256sum "web/$file" | cut -d' ' -f1)
+            matched=false
+            for attempt in 1 2 3 4 5 6 7 8 9 10; do
+              actual=$(curl -fsSL -H 'Cache-Control: no-cache' "https://jt5d.github.io/xrai-agent/$file?verify=${GITHUB_SHA}" | sha256sum | cut -d' ' -f1)
+              if [ "$actual" = "$expected" ]; then matched=true; break; fi
+              sleep 3
+            done
+            test "$matched" = true
+            echo "$file $actual" >> artifacts/deployed-sha256.txt
+          done
+      - name: Run source and browser checks
+        run: |
+          if [ "${{ matrix.flow }}" = conversation ]; then npm run check > artifacts/source-checks.txt 2>&1; fi
+          npm install --no-save --ignore-scripts playwright@1.55.0
+          if [ "${{ matrix.flow }}" = conversation ]; then
+            node test/conversation.e2e.mjs https://jt5d.github.io/xrai-agent/
+          elif [ "${{ matrix.flow }}" = repo ] || [ "${{ matrix.flow }}" = mobile-repo ] || [ "${{ matrix.flow }}" = model-runtime ]; then
+            xvfb-run -a node test/live-pages.e2e.mjs https://jt5d.github.io/xrai-agent/ "${{ matrix.flow }}"
+          else
+            node test/live-pages.e2e.mjs https://jt5d.github.io/xrai-agent/ "${{ matrix.flow }}"
+          fi
+      - name: Confirm source stayed unchanged during verification
+        run: |
+          while read -r file expected; do
+            actual=$(curl -fsSL -H 'Cache-Control: no-cache' "https://jt5d.github.io/xrai-agent/$file?verify=${GITHUB_SHA}-after" | sha256sum | cut -d' ' -f1)
+            test "$actual" = "$expected"
+          done < artifacts/deployed-sha256.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: final-public-${{ matrix.flow }}
+          path: artifacts/
+          retention-days: 7
