@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import { compoundingMetrics,extractEval,selectBrowserModelProfile } from '../web/local-agent.js';
+import { checkChromeModelAvailability,compoundingMetrics,extractEval,selectBrowserModelProfile } from '../web/local-agent.js';
 import { formatVerifiedImprovementReport,requestedImprovementCount,shouldGuardImprovementClaim,verifiedImprovementsForRun } from '../web/improvement-guard.js';
 
 test('static Pages build has no-key local inference and evidence-gated skill learning',async()=>{
@@ -9,6 +9,13 @@ test('static Pages build has no-key local inference and evidence-gated skill lea
   const local=await fs.readFile(new URL('../web/local-agent.js',import.meta.url),'utf8');
   const bootstrap=await fs.readFile(new URL('../web/coi-bootstrap.js',import.meta.url),'utf8');
   assert.match(app,/runLocalTask/);assert.match(local,/LanguageModel/);assert.match(local,/LFM2\.5-350M-ONNX/);assert.match(local,/SmolLM2-135M-Instruct-ONNX-MHA/);assert.match(local,/xrai-skills-v2/);assert.match(local,/supportNeeded/);assert.match(local,/minVersionGain/);assert.match(local,/pathScore/);assert.match(local,/improvement:stop/);assert.match(local,/parsePlannerDecision/);assert.match(local,/orchestration:decision/);assert.match(bootstrap,/app\.js/);assert.match(bootstrap,/browser-enhancements\.js/);
+});
+
+test('Chrome built-in AI readiness is bounded and falls back when availability never resolves',async()=>{
+  const started=Date.now();
+  const result=await checkChromeModelAvailability({availability:()=>new Promise(()=>{})},{},20);
+  assert.deepEqual(result,{status:'unavailable',timedOut:true});
+  assert.ok(Date.now()-started<250,'Chrome availability escaped its bounded readiness gate');
 });
 
 test('browser evaluator parse failure is fail-closed and cannot promote learning',()=>{
