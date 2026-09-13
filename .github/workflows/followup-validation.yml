@@ -30,7 +30,7 @@ jobs:
           replace('web/conversation-context.js','visibleTask,isContextualFollowup','visibleTask,isContextualFollowup,isRetryFollowup')
           replace('web/conversation-context.js','return {repo,goal:',"return {repo,lastTask:[...users].reverse().find(m=>!isRetryFollowup(m.text))?.text||goal,goal:")
           replace('web/conversation-context.js',"return executionIntent(context.goal||'',{});","return executionIntent(context.lastTask||context.goal||'',{});")
-          replace('web/app.js','const inherited=isContinuation(task)&&context.goal?context.goal:task;','const inherited=isRetryFollowup(task)?context.lastTask||context.goal||task:isContinuation(task)&&context.goal?context.goal:task;')
+          replace('web/app.js','const inherited=isRetryFollowup(task)&&context.goal?context.goal:task;','const inherited=isRetryFollowup(task)?context.lastTask||context.goal||task:task;')
           Path('test/retry-target.test.js').write_text("""import test from 'node:test';
           import assert from 'node:assert/strict';
           import {conversationContext,executionIntent,isContinuation} from '../web/conversation-context.js';
