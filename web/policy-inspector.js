@@ -1,4 +1,4 @@
-import { ingestPolicyOutcomes,policyStore } from './orchestration-policy.js';
+import { policyStore } from './orchestration-policy.js';
 
 const pct=n=>Number.isFinite(Number(n))?`${Math.round(Number(n)*100)}%`:'—';
 const ms=n=>Number.isFinite(Number(n))?`${Math.round(Number(n))} ms`:'—';
@@ -15,9 +15,9 @@ function ensure(){
 function open(){render();document.querySelector('#policyInspector').hidden=false}
 function metric(label,value){return `<div><span>${esc(label)}</span><b>${esc(value)}</b></div>`}
 function render(){
-  ingestPolicyOutcomes(localStorage);const s=policyStore(localStorage),body=document.querySelector('#policyBody'),chip=document.querySelector('#policyChip');if(!body)return;chip?.querySelector('span')&&(chip.querySelector('span').textContent='model-led');
+  const s=policyStore(localStorage),body=document.querySelector('#policyBody'),chip=document.querySelector('#policyChip');if(!body)return;chip?.querySelector('span')&&(chip.querySelector('span').textContent='model-led');
   let html='<h3>Runtime contract</h3><div class="policy-card"><strong>Model decides; runtime constrains</strong><small>Planning, delegation, and worker count are model choices. Device/user worker caps, retry ceilings, evidence gates, and verification remain deterministic.</small></div>';
-  html+='<h3>Recent observed decisions</h3>';const outcomes=(s.outcomes||[]).slice(-10).reverse();if(!outcomes.length)html+='<p class="policy-empty">Completed browser runs will appear here with the model-selected work shape and measured outcome.</p>';
+  html+='<h3>Recent observed decisions</h3>';const outcomes=(s.outcomes||[]).slice(-10).reverse();if(!outcomes.length)html+='<p class="policy-empty">Observed browser-run evidence appears here when available. This inspector never scans conversation history on the main thread.</p>';
   for(const o of outcomes)html+=`<div class="policy-card"><strong>${esc(o.policyKey||'model-led-v1')}</strong><small>${esc(o.bucket)} · ${esc(o.runId?.slice?.(0,8)||'run')}</small><div class="policy-metrics">${metric('Score',pct(o.score))}${metric('Path',pct(o.pathScore))}${metric('Latency',ms(o.durationMs))}${metric('Chosen work',`${o.workers||1} worker · ${o.retries||0} retry`)}</div></div>`;
   html+='<h3>What code does not decide</h3><p class="policy-empty">No keyword classifier promotes “fast”, “deep”, “breadth”, or “efficient” reasoning modes. Those semantic choices belong to the model; this view records outcomes rather than pretending the runtime can out-reason it.</p>';
   body.innerHTML=html;
