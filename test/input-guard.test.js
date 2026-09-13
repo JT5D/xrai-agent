@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {contextualizeFollowup,migrateLegacyUiState,purgeStaleUiState,sanitizeTask,stateLooksStale} from '../web/input-guard.js';
+import {contextualizeFollowup,isContextualFollowup,isRetryFollowup,migrateLegacyUiState,purgeStaleUiState,sanitizeTask,stateLooksStale} from '../web/input-guard.js';
 
 class MemoryStorage{
   constructor(seed={}){this.map=new Map(Object.entries(seed))}
@@ -39,10 +39,31 @@ test('current stale browser state is purged after execution upgrades',()=>{
   assert.equal(storage.getItem('xrai-ui-v3'),null);
 });
 
-test('vague follow-up gets previous run evidence instead of losing context',()=>{
+test('question follow-up gets previous run evidence instead of losing context',()=>{
   const state={lastTask:'review repo, fix failed tests, verify & explain',result:{output:'Verification passed: 27/27 tests.'}};
   const storage=new MemoryStorage({'xrai-ui-v4':JSON.stringify(state)});
   const text=contextualizeFollowup('is it fixed?',storage);
-  assert.match(text,/Previous XRAI context/);
+  assert.match(text,/mode: reference/);
   assert.match(text,/27\/27 tests/);
+});
+
+test('retry followups automatically reuse the prior meaningful task',()=>{
+  const state={
+    lastTask:'try that again',
+    messages:[
+      {role:'user',text:'review repo, fix any failed tests, verify & explain'},
+      {role:'assistant',text:'Dependency installation failed.'},
+      {role:'user',text:'try that again'}
+    ],
+    result:{output:'Dependency installation failed.'}
+  };
+  const storage=new MemoryStorage({'xrai-ui-v4':JSON.stringify(state)});
+  for(const phrase of ['try that again','do it again','retry','rerun','same thing again']){
+    assert.equal(isContextualFollowup(phrase),true);
+    assert.equal(isRetryFollowup(phrase),true);
+    const text=contextualizeFollowup(phrase,storage);
+    assert.match(text,/mode: retry/);
+    assert.match(text,/Task: review repo, fix any failed tests, verify & explain/);
+    assert.doesNotMatch(text,/ask the user to restate/i);
+  }
 });
