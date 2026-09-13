@@ -99,8 +99,8 @@ export function formatSkills(skills=[]){if(!skills.length)return 'No promoted sk
 export async function observeSkillCandidate(root,candidateInput,{task,score,verify}={}){
   const candidate=normalizeSkillCandidate(candidateInput),meta=await getMetaPolicy(root);if(!candidate||clamp(score)<meta.minScore)return{status:'ignored',reason:'No reusable candidate or score below learning threshold.'};
   let store=await loadSkillStore(root),match=similar(store,candidate),id,version,state;
-  if(match?.sim>=.58){id=match.s.id;const latest=currentForId(store,id);if(latest?.status==='candidate'&&match.proc>=.7){version=latest.version;state=latest;await append(root,{type:'skill:supported',id,version,taskFingerprint:taskFingerprint(task),score});}
-    else if(latest?.status==='promoted'&&match.proc>=.82){await append(root,{type:'skill:supported',id,version:latest.version,taskFingerprint:taskFingerprint(task),score});return{status:'existing',id,version:latest.version,skill:latest,reason:'Existing promoted skill already covers this candidate.'}}
+  if(match?.sim>=.58){id=match.s.id;const latest=currentForId(store,id),latestProc=latest?jaccard(latest.procedure,candidate.procedure):0;if(latest?.status==='candidate'&&latestProc>=.7){version=latest.version;state=latest;await append(root,{type:'skill:supported',id,version,taskFingerprint:taskFingerprint(task),score});}
+    else if(latest?.status==='promoted'&&latestProc>=.82){await append(root,{type:'skill:supported',id,version:latest.version,taskFingerprint:taskFingerprint(task),score});return{status:'existing',id,version:latest.version,skill:latest,reason:'Existing promoted skill already covers this candidate.'}}
     else{version=(latest?.version||0)+1;await append(root,{type:'skill:proposed',id,version,skill:candidate,taskFingerprint:taskFingerprint(task),score});}
   }else{id=`skill-${hash(`${candidate.title}|${candidate.trigger}|${candidate.tags.join(',')}`)}`;version=1;await append(root,{type:'skill:proposed',id,version,skill:candidate,taskFingerprint:taskFingerprint(task),score});}
   store=await loadSkillStore(root);state=store.versions.get(versionKey(id,version));
