@@ -38,13 +38,18 @@ jobs:
           replace(f,"  ['Real verification'","  ['Runtime status evidence','Reads recorded command receipts and live checks for the exact deployed build; never guesses from model confidence.'],\n  ['Real verification'")
           f='web/app.js'
           replace(f,"['capabilities','capabilities+web','self-improvement-proof']","['capabilities','capabilities+web','self-improvement-proof','runtime-status']")
-          replace(f,'goal:isContinuation(cleaned)?context.goal:cleaned',"goal:(isContinuation(cleaned)||classifyBuiltinTask(cleaned)==='runtime-status')?context.goal:cleaned")
           replace(f,"status==='error'?'Needs attention'","['error','incomplete','interrupted'].includes(status)?'Needs attention'")
           replace(f,"ui.runStatus==='error'?'Needs attention'","['error','incomplete','interrupted'].includes(ui.runStatus)?'Needs attention'")
+          f='web/conversation-context.js'
+          replace(f,'import { visibleTask',"import { isRuntimeStatusQuestion } from './runtime-status.js';\nimport { visibleTask")
+          replace(f,"export function isContinuation(task=''){","export function isContinuation(task=''){\n  if(isRuntimeStatusQuestion(task))return true;")
           replace('web/browser-workspace.js',"learning:'evidence',sha:snapshot.sha,changedFiles:","learning:'evidence',status:!passed||(requestedChange&&!finalChanges.length)?'incomplete':'completed',sha:snapshot.sha,changedFiles:")
-          p=Path('package.json');data=json.loads(p.read_text());assert data['version']=='0.3.48';data['version']='0.3.49';p.write_text(json.dumps(data,indent=2)+'\n')
-          p=Path('web/index.html');s=p.read_text();assert '0.3.48' in s;p.write_text(s.replace('0.3.48','0.3.49'))
-          p=Path('README.md');s=p.read_text().replace('v0.3.48','v0.3.49');p.write_text(s+'\n## Runtime status evidence\n\nAsk "are we fixed & working now?" to inspect recorded command receipts and live deployment checks for the exact build. This read-only tool does not call a language model, run tests, or invent repairs. Failed, cancelled, missing, or stale checks remain unverified. Status questions preserve the prior task.\n')
+          f='test/status.e2e.mjs'
+          replace(f,"version:'0.3.49'","version:'0.3.50'")
+          replace(f,"localStorage.setItem('xrai-ui-v4',JSON.stringify(s));","localStorage.setItem('xrai-ui-v4',JSON.stringify(s));window.dispatchEvent(new Event('xrai:state-updated'));")
+          p=Path('package.json');data=json.loads(p.read_text());assert data['version']=='0.3.49';data['version']='0.3.50';p.write_text(json.dumps(data,indent=2)+'\n')
+          p=Path('web/index.html');s=p.read_text();assert '0.3.49' in s;p.write_text(s.replace('0.3.49','0.3.50'))
+          p=Path('README.md');s=p.read_text().replace('v0.3.49','v0.3.50');p.write_text(s+'\n## Runtime status evidence\n\nAsk "are we fixed & working now?" to inspect recorded command receipts and live deployment checks for the exact build. This read-only tool does not call a language model, run tests, or invent repairs. Failed, cancelled, missing, or stale checks remain unverified. Status questions preserve the prior task.\n')
           PY
       - name: Source and regression checks
         run: npm run check > artifacts/source-checks.txt 2>&1
