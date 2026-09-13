@@ -152,7 +152,7 @@ function applyResult(result,runId=ui.activeRunId){
   const learningStatus=result.learning?.status||result.learning||'none';$('#learning').textContent=learningStatus;
   $('#progressBar').style.width='100%';$('#progressValue').textContent='100%';$('#progressLabel').textContent=result.status==='incomplete'?'Incomplete':'Complete';
   if(result.output)addMessage('agent',result.output,{runId});
-  if(result.diff)addMessage('system',`Verified sandbox patch preview:\n\n${result.diff.slice(0,7000)}`,{runId});
+  if(result.diff)addMessage('system',`${result.score===1?'Verified':'Unverified'} sandbox patch preview:\n\n${result.diff.slice(0,7000)}`,{runId});
   updatePatchButton();setRunStatus(result.status==='incomplete'?'incomplete':'completed',`${result.status==='incomplete'?'incomplete':'done'} · ${result.provider||mode}`);
 }
 
@@ -221,7 +221,7 @@ async function runServer(task){
 async function runBrowser(task,context,live){
   const emit=event=>{if(live())acceptEvent({...event,runId:activeSubmission.runId})};
   const progress=message=>{if(live()){$('#status').textContent=message;ui.statusText=message;persist()}};
-  const inherited=isContinuation(task)&&context.goal?context.goal:task;
+  const inherited=isRetryFollowup(task)&&context.goal?context.goal:task;
   const builtinKind=classifyBuiltinTask(inherited);
   const execute=executionIntent(task,context)&&!['capabilities','capabilities+web','self-improvement-proof'].includes(builtinKind);
   let research=null;
