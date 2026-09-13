@@ -1,7 +1,8 @@
 import { chromium } from 'playwright';
 import fs from 'node:fs/promises';
 
-const base=(process.argv[2]||process.env.XRAI_LIVE_URL||'https://jt5d.github.io/xrai-agent/').replace(/\/?$/,'/');
+const rawBase=process.argv[2]||process.env.XRAI_LIVE_URL||'https://jt5d.github.io/xrai-agent/';
+const base=rawBase.replace(/^http:/,'https:').replace(/\/?$/,'/');
 const artifacts='artifacts';
 await fs.mkdir(artifacts,{recursive:true});
 
@@ -55,6 +56,8 @@ try{
   await page.evaluate(()=>{localStorage.clear();sessionStorage.clear()});
   await page.reload({waitUntil:'domcontentloaded',timeout:60_000});
   await waitForReady(60_000);
+
+  report.runtime=await page.evaluate(()=>({href:location.href,userAgent:navigator.userAgent,deviceMemory:navigator.deviceMemory??null,webgpu:Boolean(navigator.gpu),crossOriginIsolated:globalThis.crossOriginIsolated}));
 
   // A. Normal chat: exact user message once, real model response, no silent hang.
   {
@@ -123,7 +126,15 @@ try{
   report.ok=true;
 }catch(error){
   report.ok=false;report.error=String(error?.stack||error);
-  if(page)await page.screenshot({path:`${artifacts}/live-e2e-failure.png`,fullPage:true}).catch(()=>{});
+  if(page){
+    report.failureState=await state().catch(()=>null);
+    report.visibleStatus=await page.locator('#status').textContent().catch(()=>null);
+    report.visibleProgress=await page.locator('#progressLabel').textContent().catch(()=>null);
+    report.userMessages=await userMessages().catch(()=>[]);
+    report.agentMessages=await agentMessages().catch(()=>[]);
+    report.runtime=report.runtime||await page.evaluate(()=>({href:location.href,userAgent:navigator.userAgent,deviceMemory:navigator.deviceMemory??null,webgpu:Boolean(navigator.gpu),crossOriginIsolated:globalThis.crossOriginIsolated})).catch(()=>null);
+    await page.screenshot({path:`${artifacts}/live-e2e-failure.png`,fullPage:true}).catch(()=>{});
+  }
   throw error;
 }finally{
   report.finishedAt=new Date().toISOString();
