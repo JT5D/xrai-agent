@@ -1,6 +1,6 @@
 {
   "name": "xrai-agent",
-  "version": "0.3.24",
+  "version": "0.3.25",
   "description": "Zero-install recursive AI agent with evidence-gated skill and orchestration evolution, adaptive agents, grounded browser tools, visual branchable memory, repo execution, CLI, control room, and MCP.",
   "type": "module",
   "bin": {
