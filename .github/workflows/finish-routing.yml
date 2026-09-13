@@ -1,4 +1,4 @@
-name: Validate combined transcript repairs
+name: Validate final transcript repairs
 on:
   push:
     branches: [repair/transcript-routing-0349]
@@ -15,28 +15,37 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Merge reviewed candidates and preserve concurrent fixes
+      - name: Merge with latest master without discarding concurrent changes
         run: |
           git config user.name JT5D
           git config user.email jtunick@theimclab.com
-          git checkout --detach 64df434005e07e16023fb5a8091ebd06d86b0df4
-          git merge --no-commit --no-ff 9fcdffac00a9f7ed9932656334a2d6c9142d1858 || test "$(git diff --name-only --diff-filter=U)" = 'web/conversation-context.js'
-          git show 9fcdffac00a9f7ed9932656334a2d6c9142d1858:web/conversation-context.js > web/conversation-context.js
+          git fetch origin master
+          base=$(git rev-parse origin/master)
+          printf '%s' "$base" > /tmp/xrai-base
+          git checkout --detach "$base"
+          git merge --no-commit --no-ff cb221b9e5da54ca974d63cbbcc927ac1e2712c25 || test "$(git diff --name-only --diff-filter=U)" = 'web/app.js'
+          if git diff --name-only --diff-filter=U | grep -q '^web/app.js$'; then
+            git show "$base:web/app.js" > web/app.js
+          fi
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('web/conversation-context.js');s=p.read_text()
-          old='return isContextualFollowup(text)||';new=r'return /^(?:did|have|has|was|were|is|are|what|which)\b[\s\S]*\b(?:improvements?|plans?|changes?|executed|implemented|installed|verified|done|finished|working)\b/i.test(text)||isContextualFollowup(text)||'
-          assert old in s;s=s.replace(old,new)
-          old="export function executionIntent(task='',context={}){";new=old+"\n  "+r"task=task.trim().replace(/^(?:can|could|would)\s+you\s+(?:please\s+)?(?=(?:fix|repair|implement|install|refactor|modify|edit|patch|execute|run|verify)\b)/i,'');"
-          assert old in s;s=s.replace(old,new)
-          # Preserve the concurrent fix for edit/patch/repair and mixed test-fix requests.
-          lines=s.splitlines();i=next(i for i,line in enumerate(lines) if "const target=isContinuation(task)" in line)
-          lines[i+1]=r"  return /\b(?:fix|repair|edit|patch|change)\b/i.test(target.replace(/\b(?:fix|repair)\s+(?:(?:any|the)\s+)?(?:failed|failing|broken)\s+tests?\b/ig,''))||/\b(?:improve|improvements?|implement|install|integrate|refactor|modify|add|recommendations?)\b/i.test(target);"
-          p.write_text('\n'.join(lines)+'\n')
+          p=Path('web/app.js');s=p.read_text()
+          if 'const inherited=resolvedTask(task,context);' not in s:
+              old='const inherited=isRetryFollowup(task)&&context.goal?context.goal:task;'
+              assert old in s
+              s=s.replace(old,'const inherited=resolvedTask(task,context);')
+          if 'requestsChanges,resolvedTask }' not in s:
+              assert 'requestsChanges }' in s
+              s=s.replace('requestsChanges }','requestsChanges,resolvedTask }')
+          p.write_text(s)
+          p=Path('test/builtin-routing.test.js')
+          if p.exists():
+              s=p.read_text().replace('{executionIntent,','{resolvedTask,executionIntent,').replace("new Function('isRetryFollowup',","new Function('resolvedTask',").replace('make(isRetryFollowup,','make(resolvedTask,')
+              p.write_text(s)
           PY
-          git add web/conversation-context.js
+          git add web/app.js test/builtin-routing.test.js
           test -z "$(git diff --name-only --diff-filter=U)"
-      - name: Verify combined source and conversation UI
+      - name: Verify source and conversation UI
         run: |
           mkdir -p artifacts
           npm run check > artifacts/source-checks.txt 2>&1
@@ -46,8 +55,8 @@ jobs:
         run: |
           git add web test package.json README.md
           tree=$(git write-tree)
-          commit=$(printf '%s\n' 'Merge verified transcript routing with concurrent context and history fixes' | git commit-tree "$tree" -p 64df434005e07e16023fb5a8091ebd06d86b0df4 -p 9fcdffac00a9f7ed9932656334a2d6c9142d1858)
-          git push origin "$commit:refs/heads/repair/transcript-routing-0349-merged"
+          commit=$(printf '%s\n' 'Integrate validated exact-transcript routing and dispatcher regressions' | git commit-tree "$tree" -p "$(cat /tmp/xrai-base)" -p cb221b9e5da54ca974d63cbbcc927ac1e2712c25)
+          git push origin "$commit:refs/heads/repair/transcript-routing-final"
           printf '%s\n' "$commit" > artifacts/tested-commit.txt
       - name: Export source
         if: always()
