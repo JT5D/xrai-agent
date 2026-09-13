@@ -42,6 +42,25 @@ test('exact bad capability prompt executes a grounded capability answer rather t
   assert.ok(events.some(e=>e.type==='tool:done'&&e.name==='web_search'));
 });
 
+test('exact self-improvement proof prompt is evidence-only and cannot invent improvements',async()=>{
+  const task='prove self improvement is happening by making 3 improvements now';
+  assert.equal(classifyBuiltinTask(task),'self-improvement-proof');
+  const storage={getItem:()=>JSON.stringify({events:[
+    {type:'improvement:accept',summary:'Retry improved verified score',data:{baseline:.82,candidate:.91,delta:.09,verifier:'trace-aware evaluator'}},
+    {type:'skill:promoted',summary:'Promoted safer verifier skill',data:{id:'skill-x',version:2,baseline:.88,candidateScore:.94,verified:true}}
+  ]})};
+  const events=[];const result=await runBuiltinTask(task,{storage,emit:e=>events.push(e)});
+  assert.equal(result.provider,'browser-tools');assert.equal(result.learning.status,'evidence-only');
+  assert.match(result.output,/2 verified retained improvements/i);assert.match(result.output,/skill-x@v2/);assert.match(result.output,/baseline 82%/);
+  assert.doesNotMatch(result.output,/Text Summarization|AI Safety Knowledge|chain-of-thought prompting/i);
+  assert.ok(events.some(e=>e.name==='improvement_evidence'&&e.data?.count===2));
+});
+
+test('self-improvement proof fails closed to zero when no retained evidence exists',async()=>{
+  const result=await runBuiltinTask('prove self improvement is happening by making 3 improvements now',{storage:{getItem:()=>JSON.stringify({events:[]})}});
+  assert.match(result.output,/^0 verified improvements/i);assert.match(result.output,/will not invent improvements/i);
+});
+
 test('evaluator JSON is recognized as an internal artifact and normal answers are not',()=>{
   const leaked='```json {"score":0.78,"critique":"needs work","work_product":{},"skills":[]} ```';
   assert.equal(isEvaluatorArtifact(leaked),true);
