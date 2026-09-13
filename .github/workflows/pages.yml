@@ -1,9 +1,12 @@
 name: Deploy XRAI Agent Pages
 
-# One-time prerequisite: in GitHub Settings > Pages, set Source to GitHub Actions.
-# After that, run this workflow manually. Keeping deploy manual avoids a permanent
-# failing check while Pages is disabled and prevents source/deployment drift.
 on:
+  push:
+    branches: [master]
+    paths:
+      - 'web/**'
+      - 'knowledge/**'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
@@ -37,3 +40,19 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify deployed version
+        shell: bash
+        run: |
+          expected=$(sed -n 's/.*<dt>Version<\/dt><dd>\([^<]*\)<\/dd>.*/\1/p' _site/index.html | head -1)
+          test -n "$expected"
+          url="${{ steps.deployment.outputs.page_url }}?sha=${GITHUB_SHA}"
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            html=$(curl -fsSL -H 'Cache-Control: no-cache' "$url" || true)
+            if printf '%s' "$html" | grep -Fq "<div><dt>Version</dt><dd>${expected}</dd></div>"; then
+              echo "Verified live XRAI Agent ${expected} at ${{ steps.deployment.outputs.page_url }}"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Expected live version ${expected}, but GitHub Pages did not serve it after deployment." >&2
+          exit 1
