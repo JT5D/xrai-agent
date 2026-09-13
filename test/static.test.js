@@ -3,15 +3,20 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { extractEval,selectBrowserModelProfile } from '../web/local-agent.js';
 
-test('static Pages build has no-key local inference and v2 skill learning',async()=>{
+test('static Pages build has no-key local inference and evidence-gated skill learning',async()=>{
   const app=await fs.readFile(new URL('../web/app.js',import.meta.url),'utf8');
   const local=await fs.readFile(new URL('../web/local-agent.js',import.meta.url),'utf8');
   const html=await fs.readFile(new URL('../web/index.html',import.meta.url),'utf8');
-  assert.match(app,/runLocalTask/);assert.match(local,/LanguageModel/);assert.match(local,/LFM2\.5-350M-ONNX/);assert.match(local,/SmolLM2-135M-Instruct-ONNX-MHA/);assert.match(local,/xrai-skills-v2/);assert.match(local,/supportNeeded/);assert.match(html,/\.\/app\.js/);assert.doesNotMatch(html,/src="\/app\.js"/);
+  assert.match(app,/runLocalTask/);assert.match(local,/LanguageModel/);assert.match(local,/LFM2\.5-350M-ONNX/);assert.match(local,/SmolLM2-135M-Instruct-ONNX-MHA/);assert.match(local,/xrai-skills-v2/);assert.match(local,/supportNeeded/);assert.match(local,/minVersionGain/);assert.match(local,/pathScore/);assert.match(local,/improvement:stop/);assert.match(html,/\.\/app\.js/);assert.doesNotMatch(html,/src="\/app\.js"/);
 });
 
 test('browser evaluator parse failure is fail-closed and cannot promote learning',()=>{
-  const ev=extractEval('not valid evaluator json');assert.equal(ev.score,0);assert.equal(ev.skill.title,'');
+  const ev=extractEval('not valid evaluator json');assert.equal(ev.score,0);assert.equal(ev.pathScore,0);assert.equal(ev.compositeScore,0);assert.equal(ev.skill.title,'');
+});
+
+test('browser evaluator caps learning when execution path quality is poor',()=>{
+  const ev=extractEval('{"score":0.95,"pathScore":0.4,"critique":"good answer","pathCritique":"weak evidence","skill":{"title":"","trigger":"","procedure":"","verifier":"","tags":[]}}');
+  assert.equal(ev.score,.95);assert.equal(ev.pathScore,.4);assert.equal(ev.compositeScore,.55);
 });
 
 test('browser chooses a smaller quantized model on mobile and a full model on capable desktop',()=>{
@@ -33,7 +38,7 @@ test('public browser version and cache-busted runtime assets stay synchronized',
   const pkg=JSON.parse(await fs.readFile(new URL('../package.json',import.meta.url),'utf8'));
   const version=String(pkg.version).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
   assert.match(html,new RegExp(`<dt>Version<\\/dt><dd>${version}<\\/dd>`));
-  for(const asset of ['coi-bootstrap.js','static-runtime.js','input-guard.js','browser-enhancements.js','app.js'])assert.match(html,new RegExp(`${asset.replace('.','\\.')}\\?v=${version}`));
+  for(const asset of ['coi-bootstrap.js','static-runtime.js','input-guard.js','browser-enhancements.js','event-inspector.js','app.js'])assert.match(html,new RegExp(`${asset.replace('.','\\.')}\\?v=${version}`));
 });
 
 test('public browser has integrated zero-install repo execution',async()=>{
