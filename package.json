@@ -1,6 +1,6 @@
 {
   "name": "xrai-agent",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Zero-install recursive AI agent with evidence-gated skill evolution, grounded browser tools, durable multi-chat memory, repo execution, CLI, control room, and MCP.",
   "type": "module",
   "bin": {
