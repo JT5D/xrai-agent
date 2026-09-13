@@ -34,11 +34,12 @@ jobs:
                   p.write_text(entry['text'])
               else:
                   assert hashlib.sha256(p.read_bytes()).hexdigest()==entry['sha'],str(p)
-                  lines=p.read_text().splitlines(True)
+                  chars=list(p.read_text())
                   for start,end,text in reversed(entry['hunks']):
-                      lines[start:end]=[text]
-                  p.write_text(''.join(lines))
+                      chars[start:end]=list(text)
+                  p.write_text(''.join(chars))
           p=Path('package.json');data=json.loads(p.read_text());data['version']='0.3.48';p.write_text(json.dumps(data,indent=2)+'\n')
+          p=Path('README.md');p.write_text(p.read_text().replace('v0.3.47','v0.3.48').replace('The evaluator remains internal evidence for learning; it is not the product response.','The evaluator supplies internal estimates, not execution proof. Browser suggestions remain candidates until a real verifier receipt exists. Sandbox patches are not committed or deployed.'))
           PY
           fi
       - name: Source checks
