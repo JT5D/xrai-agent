@@ -49,9 +49,24 @@ function queueRetry(task){
 function installPendingRetry(){
   window.addEventListener('DOMContentLoaded',()=>{
     if(sessionStorage.getItem(RETRY_PENDING_KEY)!=='1')return;
-    sessionStorage.removeItem(RETRY_PENDING_KEY);
-    const run=()=>{const button=$('#rerun');if(button&&!button.disabled){button.click();return true}return false};
-    if(!run())setTimeout(run,80);
+    let attempts=0;
+    const timer=setInterval(()=>{
+      attempts++;
+      const button=$('#rerun');
+      if(button&&!button.disabled){
+        clearInterval(timer);
+        sessionStorage.removeItem(RETRY_PENDING_KEY);
+        button.click();
+        return;
+      }
+      if(attempts>=100){
+        clearInterval(timer);
+        sessionStorage.removeItem(RETRY_PENDING_KEY);
+        const state=currentState();
+        state.runStatus='error';state.statusText='retry could not start after app initialization';
+        writeState(state);
+      }
+    },50);
   });
 }
 
