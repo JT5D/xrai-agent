@@ -55,7 +55,8 @@ async function waitForNewResult(oldRun,timeout){
   await within(page.waitForFunction(previous=>{
     try{
       const s=JSON.parse(localStorage.getItem('xrai-ui-v4')||'null');
-      return Boolean(s?.result?.runId&&s.result.runId!==previous&&['completed','error'].includes(s.runStatus));
+      if(s?.runStatus==='error')return true;
+      return Boolean(s?.runStatus==='completed'&&s?.result?.runId&&s.result.runId!==previous);
     }catch{return false}
   },oldRun,{timeout,polling:250}),'new result',timeout+1000);
   return state();
