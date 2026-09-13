@@ -1,4 +1,4 @@
-# XRAI Agent v0.3.1
+# XRAI Agent v0.3.4
 
 Small, transparent recursive AI agent with **evidence-gated skill evolution** and a zero-install browser execution lane.
 
@@ -84,7 +84,7 @@ Server/CLI skills can be promoted immediately by a safe concrete verifier. Brows
 Browser state is bounded and durable across refresh/page eviction:
 
 ```text
-xrai-ui-v3
+xrai-ui-v4
 xrai-skills-v2
 xrai-meta-v2
 xrai-runs-v2
