@@ -1,30 +1,53 @@
-name: Isolate real browser inference
+name: Verify portable patch export
 on:
   push:
     branches: [repair/inference-isolation-20260913]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  isolate:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
-    env:
-      PROFILE: cpu
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
+          path: tools
           persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 04599a7ab8f01744a4d535712d6172dad2f774cc
+          path: source
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install --no-save --ignore-scripts playwright@1.56.1
-      - name: Validate one coding-capable CPU candidate
+      - name: Apply bounded export fix
+        working-directory: source
         run: |
-          sed -i 's#onnx-community/Qwen3-0.6B-ONNX#onnx-community/Qwen2.5-Coder-1.5B-Instruct#g' test/inference-candidate-probe.mjs
-          node test/inference-candidate-probe.mjs
+          python3 ../tools/tools/apply-export-fix.py
+          cp ../tools/tools/patch-export.e2e.mjs test/patch-export.e2e.mjs
+      - name: Source checks
+        working-directory: source
+        run: |
+          mkdir -p artifacts
+          npm run check > artifacts/source-checks.txt 2>&1
+      - name: Real patch application and rendered download
+        working-directory: source
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          node test/patch-export.e2e.mjs
+      - name: Record tested source-only candidate
+        working-directory: source
+        run: |
+          git config user.name JT5D
+          git config user.email jtunick@theimclab.com
+          git add web/browser-workspace.js test/browser-workspace.test.js test/patch-export.e2e.mjs
+          git commit -m 'Export applicable unified patches and verify browser downloads'
+          git push origin HEAD:refs/heads/repair/patch-export-tested-20260913
+          git rev-parse HEAD > artifacts/tested-commit.txt
+          git diff HEAD^ HEAD > artifacts/reviewed-source.diff
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: inference-coder-cpu
-          path: artifacts/
+          name: verified-patch-export
+          path: source/artifacts/
           retention-days: 7
