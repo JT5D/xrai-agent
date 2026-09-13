@@ -8,6 +8,12 @@ jobs:
   model:
     runs-on: ubuntu-latest
     timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [lite, full]
+    env:
+      PROFILE: ${{ matrix.profile }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,9 +25,11 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import os
           p=Path('web/local-agent.js');s=p.read_text();old='const preferred=await resolveBrowserModelProfile(navigator,true),'
           assert old in s
-          s=s.replace(old,"const preferred={modelId:FULL_MODEL_ID,device:'wasm',dtype:'q4',maxNewTokens:80,label:'LFM2.5 350M'},")
+          profile="{modelId:FULL_MODEL_ID,device:'wasm',dtype:'q8',maxNewTokens:80,label:'LFM2.5 350M'}" if os.environ['PROFILE']=='full' else "{modelId:LITE_MODEL_ID,device:'wasm',dtype:'q4',maxNewTokens:80,label:'SmolLM2 135M'}"
+          s=s.replace(old,'const preferred='+profile+',')
           start=s.index("content:`You are XRAI. Answer the current request")
           end=s.index('`}',start)
           s=s[:start]+"content:`You are XRAI. Answer the latest user request directly and concisely. No tools were executed in this turn. Never claim to have changed files or installed anything."+s[end:]
@@ -29,11 +37,11 @@ jobs:
           p=Path('test/conversation.e2e.mjs');s=p.read_text();start=s.index("    await page.addInitScript(");end=s.index("    await page.goto(base)",start);s=s[:start]+s[end:]
           start=s.index("    await send('Help me design");end=s.index('    await context.close()',start)
           s=s[:start]+'''    let s=await send('What is 2 + 2? Reply with only the number.');
-              assert.match(s.result.output.trim(),/^4[.!]?$/);report.math=s.result.output;
+              report.math=s.result.output;assert.match(s.result.output.trim(),/^4[.!]?$/);
               s=await send('My project code is cobalt-47. Reply with only that code.');
-              assert.match(s.result.output,/cobalt-47/i);report.instruction=s.result.output;
+              report.instruction=s.result.output;assert.match(s.result.output,/cobalt-47/i);
               s=await send('What is my project code? Reply with only the code.');
-              assert.match(s.result.output,/cobalt-47/i);report.memory=s.result.output;
+              report.memory=s.result.output;assert.match(s.result.output,/cobalt-47/i);
               await page.screenshot({path:'artifacts/real-model-candidate.png'});
               assert.deepEqual(errors,[]);report.checks.push({passed:true,provider:s.result.provider,pageErrors:errors});
           '''+s[end:]
@@ -53,6 +61,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: stronger-model-evaluation
+          name: model-evaluation-${{ matrix.profile }}
           path: artifacts/
           retention-days: 7
