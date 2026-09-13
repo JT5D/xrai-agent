@@ -1,6 +1,7 @@
 const DEFAULT_LIMIT=8;
 const TIMEOUT_MS=4500;
 const PROVIDER_TIMEOUT_MS=5500;
+const MAX_TEXT_BYTES=96_000;
 
 function clean(value=''){return String(value).replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim()}
 function dedupe(rows,limit=DEFAULT_LIMIT){
@@ -21,6 +22,20 @@ async function bounded(promise,timeout,label){
   let timer;
   try{return await Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(`${label} timed out after ${timeout} ms`)),timeout)})])}
   finally{clearTimeout(timer)}
+}
+async function readTextLimited(response,maxBytes=MAX_TEXT_BYTES){
+  const reader=response?.body?.getReader?.();
+  if(!reader)return String(await response.text()).slice(0,maxBytes);
+  const decoder=new TextDecoder();let text='',bytes=0;
+  try{
+    while(bytes<maxBytes){
+      const{value,done}=await reader.read();if(done)break;
+      const remaining=maxBytes-bytes,chunk=value?.byteLength>remaining?value.subarray(0,remaining):value;
+      if(chunk?.byteLength){bytes+=chunk.byteLength;text+=decoder.decode(chunk,{stream:true})}
+      if(value?.byteLength>remaining)break;
+    }
+  }finally{if(bytes>=maxBytes)try{await reader.cancel()}catch{}}
+  return text+decoder.decode();
 }
 function flattenDdg(topics,out=[]){
   for(const item of topics||[]){
@@ -52,8 +67,8 @@ async function github(query,fetchFn){
 }
 async function jina(query,fetchFn){
   const url=`https://search.jina.ai/?q=${encodeURIComponent(query)}`;
-  const r=await timedFetch(url,fetchFn,3500);if(!r.ok)throw new Error(`Jina Search ${r.status}`);const text=await r.text(),rows=[];
-  const re=/<a[^>]+href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;let m;
+  const r=await timedFetch(url,fetchFn,3500);if(!r.ok)throw new Error(`Jina Search ${r.status}`);const text=await readTextLimited(r),rows=[];
+  const re=/<a[^>]+href=["'](https?:\/\/[^"']+)["'][^>]*>([^<]{1,300})<\/a>/gi;let m;
   while((m=re.exec(text))&&rows.length<6){const link=m[1];if(/search\.jina\.ai|jina\.ai\/(?:api|reader)/i.test(link))continue;const title=clean(m[2]);if(title.length<3)continue;rows.push({title,url:link,snippet:'Search result',source:'Jina Search'})}
   return rows;
 }
