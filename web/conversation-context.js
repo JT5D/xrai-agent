@@ -1,4 +1,4 @@
-import { visibleTask,isContextualFollowup } from './input-guard.js';
+import { visibleTask,isContextualFollowup,isRetryFollowup } from './input-guard.js';
 const FOLLOWUP=/\b(?:previous|these|those|this|that|our|chat history|recommendations?|plans?)\b/i;
 export function isContinuation(task=''){
   return /^(?:did|have|has|was|were|is|are|what|which)\b[\s\S]*\b(?:improvements?|plans?|changes?|executed|implemented|installed|verified|done|finished|working)\b/i.test(task.trim())||isContextualFollowup(task)||(/\b(?:do|execute|implement|apply|finish|continue|verify|fix|remember)\b/i.test(task)&&FOLLOWUP.test(task));
@@ -15,12 +15,12 @@ export function conversationContext(state={},task=''){
     const content=(m.role==='user'?visibleTask(m.text):String(m.text||'')).slice(0,1200);if(size+content.length>8000||messages.length>=14)break;
     messages.unshift({role:m.role==='agent'?'assistant':'user',content});size+=content.length;
   }
-  return {repo,goal:String(goal).slice(0,2000),messages,previousResult:state.result};
+  return {repo,lastTask:[...users].reverse().find(m=>!isRetryFollowup(m.text))?.text||goal,goal:String(goal).slice(0,2000),messages,previousResult:state.result};
 }
 export function executionIntent(task='',context={}){
   task=task.trim().replace(/^(?:can|could|would)\s+you\s+(?:please\s+)?(?=(?:fix|repair|implement|install|refactor|modify|edit|patch|execute|run|verify)\b)/i,'');
   if(/^(?:did|does|has|have|is|are|what|why|can|could|should|remember|summarize|explain)\b/i.test(task.trim()))return false;
-  if(/^(?:please\s+)?(?:try|retry|again|repeat|rerun)\b/i.test(task.trim()))return executionIntent(context.goal||'',{});
+  if(/^(?:please\s+)?(?:try|retry|again|repeat|rerun)\b/i.test(task.trim()))return executionIntent(context.lastTask||context.goal||'',{});
   if(/^\s*(?:research|search|look up)\b/i.test(task)&&! /\b(?:implement|install|integrate|fix|refactor|apply|edit)\b/i.test(task))return false;
   const action=/\b(?:fix|implement|install|integrate|refactor|modify|edit|patch|commit|push|execute|run|verify|review|audit|improve)\b|\bmak(?:e|ing)\s+(?:\d+\s+)?(?:more\s+)?improvements?\b/i;
   const scope=/\b(?:repos?|repository|xrai|tests?|code|skills?|context|chat|recommendations?|plans?)\b/i;

@@ -221,7 +221,7 @@ async function runServer(task){
 async function runBrowser(task,context,live){
   const emit=event=>{if(live())acceptEvent({...event,runId:activeSubmission.runId})};
   const progress=message=>{if(live()){$('#status').textContent=message;ui.statusText=message;persist()}};
-  const inherited=isRetryFollowup(task)&&context.goal?context.goal:task;
+  const inherited=isRetryFollowup(task)?context.lastTask||context.goal||task:task;
   const builtinKind=classifyBuiltinTask(inherited);
   const execute=executionIntent(task,context)&&!['capabilities','capabilities+web','self-improvement-proof'].includes(builtinKind);
   let research=null;
