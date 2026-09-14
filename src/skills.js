@@ -206,7 +206,7 @@ export async function recordSkillUsage(root,skills,evidence){
 
 export async function recordRunOutcome(root,{task,score,skills=[],candidateDecision,verified=false}={}){
   const event={taskFingerprint:taskFingerprint(task),score:clamp(score),skillRefs:(skills||[]).map(s=>`${s.id}@v${s.version}`),candidateDecision:candidateDecision?.status||'none'};
-  if(verified!==true){await append(root,{type:'run:observation',...event,verified:false});return{recorded:false,reason:'Unverified/model-scored run kept as an observation only.'}}
+  if(verified!==true){await append(root,{type:'run:observation',...event,verified:false});return null}
   await append(root,{type:'run:outcome',...event,verified:true});return maybeMetaMaintenance(root);
 }
 
