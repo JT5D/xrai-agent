@@ -10,7 +10,7 @@ test('web UI ships X-ray provenance, chat, status, timeline, skills, and runtime
   assert.match(h,/Agent Status/);
   assert.match(h,/Recent activity/);
   assert.match(h,/Timeline/);
-  assert.match(h,/Evidence-gated skills/);
+  assert.match(h,/Transfer-verified skills/);
   assert.match(h,/Local execution host/);
   assert.match(h,/X-ray provenance/);
 });
