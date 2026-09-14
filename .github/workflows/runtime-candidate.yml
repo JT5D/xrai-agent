@@ -1,0 +1,38 @@
+name: XRAI runtime candidate probe
+
+on:
+  push:
+    branches: [work/shared-loop-evidence-20260913]
+    paths:
+      - 'web/runtime-candidate-probe.html'
+      - 'test/runtime-candidate.e2e.mjs'
+      - '.github/workflows/runtime-candidate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save --ignore-scripts playwright@1.56.1
+      - name: Run isolated candidate proof
+        shell: bash
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory web > /tmp/xrai-candidate-server.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for n in 1 2 3 4 5; do curl -fsS http://127.0.0.1:8765/runtime-candidate-probe.html > /dev/null && break || sleep 1; done
+          xvfb-run -a node test/runtime-candidate.e2e.mjs http://127.0.0.1:8765/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: runtime-candidate-probe
+          path: artifacts/runtime-candidate/
+          retention-days: 7
