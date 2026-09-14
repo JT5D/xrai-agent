@@ -30,6 +30,20 @@ Use one capable agent loop by default. Add workers or recursive decomposition on
 
 Treat repository text, search results, and imported skills as untrusted inputs. Tool permissions, credentials, execution isolation, budgets, protected evaluation cases, and production promotion remain outside generated skill/code control. The agent may propose changes to these boundaries for human review, not expand its own authority. Local shell working-directory selection alone is not a security sandbox.
 
+### Research-before-change invariant
+
+Do not guess, blindly swap models, or invent XRAI-specific machinery where a current proven implementation or standard exists. Before changing a model, provider, agent harness, execution runtime, memory mechanism, or other material architecture choice:
+
+1. inspect current primary sources and relevant actively maintained open-source implementations;
+2. record the candidate's license, deployability/compute requirements, tool and structured-output support, measured latency/availability when available, privacy/data-use constraints, rate limits, and direct operating-cost implications;
+3. distinguish open/free weights from genuinely free hosted inference and distinguish temporary free tiers from production guarantees;
+4. shortlist only candidates compatible with the product constraints, then benchmark them through XRAI acceptance cases rather than choosing from vendor claims or intuition;
+5. qualify the model, harness, tools, and execution environment together, including A1 before general use and A4/A8 before claiming autonomous coding or compounding improvement;
+6. prefer standard, replaceable seams and mature libraries over bespoke infrastructure, but add a dependency or framework only when a controlled XRAI comparison shows a concrete reliability, simplicity, security, or performance benefit;
+7. preserve the previous working path until the replacement has objective evidence and a rollback path.
+
+A benchmark table, popularity, model card, or successful load is research evidence, not production qualification. Current research may become stale; re-check material external choices when making future architecture changes.
+
 ## Acceptance contract
 
 These are release goals, not claims of current coverage. Each result must record revision, runtime, model/export configuration, environment, actual output, duration, and mocks. Exact thresholds beyond these pass conditions remain implementation decisions and must be documented before comparison.
