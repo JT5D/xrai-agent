@@ -19,10 +19,12 @@ test('browser repo verification is not mislabeled as retained learning',async()=
   assert.doesNotMatch(source,/learning:'evidence'/);
 });
 
-test('unqualified browser fallback remains unchanged behind the model quality gate',async()=>{
+test('unqualified browser fallback remains the default while candidate profiles stay off-path',async()=>{
   const source=await fs.readFile(new URL('../web/local-agent.js',import.meta.url),'utf8');
-  assert.match(source,/resolveBrowserModelProfile\(navigator,true\)/);
-  assert.match(source,/passes the explicit quality gate/);
+  assert.match(source,/preferFast=options\.preferFast\?\?true/);
+  assert.match(source,/allowChrome=options\.allowChrome\?\?true/);
+  assert.match(source,/return transformersModel\(onProgress,preferFast\)/);
+  assert.match(source,/model=await getLocalModel\(progress\)/);
 });
 
 test('public UI distinguishes verified evidence from aspirational self-improvement',async()=>{
