@@ -56,8 +56,8 @@ export async function resolveBrowserModelProfile(nav={},preferFast=false){const 
 export async function withWebGpuFallback(load,profile,onProgress=()=>{}){try{return await load(profile)}catch(error){if(profile?.device!=='webgpu')throw error;onProgress?.(`WebGPU unavailable: ${error?.message||error}; retrying with WASM.`);return load({...profile,device:'wasm',dtype:'q4'})}}
 
 async function transformersModel(onProgress){
-  // Device constraints, not an unconditional fast flag, decide whether the lite model is acceptable.
-  const preferred=await resolveBrowserModelProfile(navigator,false),{pipeline}=await import(CDN);
+  // Keep the deployed fast fallback until a different inference profile passes the explicit quality gate.
+  const preferred=await resolveBrowserModelProfile(navigator,true),{pipeline}=await import(CDN);
   const load=async profile=>{
     onProgress?.(`Loading ${profile.label} · ${profile.device.toUpperCase()}…`);
     const generator=await pipeline('text-generation',profile.modelId,{device:profile.device,dtype:profile.dtype,progress_callback:p=>{if(p?.progress!=null)onProgress?.(`Downloading local model ${Math.round(p.progress)}%`);else if(p?.status)onProgress?.(String(p.status))}});
