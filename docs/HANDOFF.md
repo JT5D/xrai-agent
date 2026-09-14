@@ -1,327 +1,226 @@
 # XRAI Agent architecture and execution handoff
 
-Assessment updated: 2026-09-13. Implementation target: **JT5D/xrai-agent only**.
+Assessment updated: 2026-09-13. Scope: **JT5D/xrai-agent only**.
 
-Start with `../SPEC.md`. It is the authoritative product contract and intentionally does not freeze the implementation. The dated model/runtime research is in `MODEL_RUNTIME_RESEARCH_2026-09-13.md`.
+## Read order
+
+1. `../SPEC.md` — authoritative goals, boundaries, acceptance gates, and priorities.
+2. `AGENT_ARCHITECTURE_RESEARCH_2026-09-13.md` — current agent/skills/MCP/A2A plus Portals/Jarvis research.
+3. `MODEL_RUNTIME_RESEARCH_2026-09-13.md` — model/provider/runtime research.
+4. `RUNTIME_CANDIDATE_PROBE_2026-09-13.md` — exact Puter/Lifo probe result.
+
+If these disagree, `SPEC.md` wins unless deliberately revised with new evidence.
 
 ## Current repository state
 
-- `master` remains based at `6cff7e7c1be02e5b75b58e96f8b83830bbc38213` in draft PR #9; re-fetch before any merge because concurrent work can change this.
-- Work remains isolated on `work/shared-loop-evidence-20260913` in draft PR #9.
-- The master spec is now v0.2 and explicitly defines the knowledge/retrieval/graph-memory contract plus P0-P3 delivery priorities.
-- Source CI previously passed the code-bearing branch after the evidence/learning and remote-candidate harness changes. Every later documentation/probe commit must still be rechecked before promotion.
-- The branch is **not deployed** and this document does not claim the public product is fixed.
+- Branch: `work/shared-loop-evidence-20260913`
+- Draft PR: #9
+- Base seen by the PR: `master@6cff7e7c1be02e5b75b58e96f8b83830bbc38213`; re-fetch before merge.
+- Master spec: **v0.3**.
+- This branch is **not deployed** and does not claim the public product is fixed.
+- Temporary Puter/Lifo probe page, test, and workflow were removed after their evidence was preserved in the dated probe document.
 
-## Governing engineering rule
-
-No speculative model swaps, runtime swaps, memory systems, or bespoke architecture by intuition.
-
-Before changing a model, provider, harness, execution runtime, memory/retrieval mechanism, knowledge graph, or comparable material architecture choice:
-
-1. inspect current primary sources and proven maintained implementations;
-2. record license, compute/deploy requirements, tool/structured-output support, privacy/data policy, limits, latency/availability when available, and cost implications;
-3. distinguish open weights from genuinely free hosted inference;
-4. benchmark shortlisted candidates through XRAI acceptance cases;
-5. qualify **model + harness + tools + retrieval + execution environment together**;
-6. prefer standard replaceable seams and mature patterns, but add a framework only if an XRAI comparison proves benefit;
-7. preserve rollback until the replacement is objectively better.
-
-The exact invariant is in `SPEC.md`.
-
-## Target architecture
-
-Keep the product small and modular:
+## One architecture target
 
 ```text
 browser / CLI / MCP / host
         |
  durable task + session state
         |
- retrieval boundary
+ provenance-aware retrieval
   | curated XRAI knowledge
-  | source-linked research
+  | source-linked live research
   | transfer-verified skills
-  | semantic retrieval when proven useful
-  | structural graph relations when proven useful
+  | semantic retrieval only if A12 earns it
+  | structural graph relations only if A12 earns it
         |
- small provenance-rich context
+ small relevant context
         |
- one bounded agent/tool loop
+ one bounded model/tool loop
         |
- provider-neutral model adapter + real tool adapters
+ provider capability adapter + typed tools
         |
- execution environment adapter
+ execution adapter
         |
  independent verifier receipts
         |
- evidence ledger + transfer-verified reusable learning
+ evidence ledger + verified reusable learning
 ```
 
-This is an architecture boundary, not a framework mandate.
+Default rule: **one capable agent, real tools, independent verification, explicit state, minimal machinery**. Add workers/frameworks/datastores only when an XRAI acceptance comparison proves a benefit.
 
-## Verified knowledge and graph status
+## Verified decisions
 
-### XRAI knowledgebase: wired today
+### Keep for P0
 
-The current browser agent source explicitly loads these seed files:
+- Existing XRAI KB retrieval: genuinely wired into browser chat today.
+- Conversation/follow-up state handling.
+- Source-linked research path.
+- WebContainer Node/JS/TS repo execution where supported.
+- Evidence-gated skill semantics.
+- Provenance/X-ray UI concepts.
+- Browser, CLI, MCP, and host as product interfaces, while their internal semantics converge later.
 
-- `knowledge/MISSION.md`
-- `knowledge/KEY_LEARNINGS.md`
-- `knowledge/SYSTEM_PATTERNS.md`
-- `knowledge/AGENTIC_CODING_EVALS_2025_2026.md`
-- `knowledge/UNVERIFIED.md`
+### Do not use as the primary production brain
 
-It chunks the text, scores relevance using lexical token overlap, retrieves a small ranked set, mixes that with eligible transfer-verified skills and bounded conversation context, and passes the resulting evidence into the browser model turn.
+The tested tiny browser-local model strategy is closed for P0. The active 135M path failed the bounded A1 qualification and the tested 1.2B candidate did not meet the response budget in the tested CI browser environment. Browser-local inference may remain an optional fallback only if later measured successfully.
 
-**Verified conclusion:** the knowledgebase is genuinely wired into browser chat. This is source/mechanism verification only; it does not prove retrieval quality is optimal or that the current weak browser-local model can reason well from the retrieved context.
+### Puter
 
-### Current knowledge limitations
+Official documentation provides the needed primitives for a promising no-developer-key browser path, including GPT-5.6 Luna, tools, web search, and interactive website authentication. The isolated CI probe opened the auth popup but did not complete interactive authentication, so Puter is **not yet qualified or disqualified** for a real user session.
 
-- The corpus is very small.
-- Retrieval is lexical rather than semantic/hybrid.
-- Provenance exists at a basic source-file level but freshness/conflict handling is still minimal.
-- More context is not a substitute for a capable model.
+Next useful proof: real interactive auth -> A1 exact cases -> tools -> web search -> privacy/limit review.
 
-Therefore the existing KB stays in the P0 path, but a retrieval-platform rewrite does not.
+### Lifo
 
-### Holograim: useful reference, not current XRAI memory
+The exact tested jsDelivr ESM path failed before the sandbox ran because of a dependency export mismatch. Do not replace WebContainer with it. Revisit only through a supported packaging path if WebContainer becomes the actual blocker and the comparison is cheaper than keeping the working lane.
 
-`JT5D/holograim` is currently documented as a high-performance crawler/visualizer with filesystem, web, S3, and Google Drive sources; SQLite output; graph JSON containing nodes/edges/hierarchy; and force/tree/sunburst visualization.
+### Knowledge graph / Holograim
 
-**Verified conclusion:** these are useful structural indexing/provenance patterns for XRAI, but Holograim is **not currently wired into `xrai-agent`** and is not presently documented as a proven semantic agent-memory system.
+Holograim is a useful structural crawler/graph/visualization reference, not current XRAI semantic memory and not wired into xrai-agent. It stays P2. The missing graph is **not** tonight's blocker.
 
-Use it later through the common retrieval boundary for structural topology and X-ray provenance. Do not import its full stack into tonight's stabilization pass.
+## Adjacent-project conclusions
 
-## Current model/runtime evidence
+### Portals v4
 
-### Browser-local primary-brain strategy: closed
+Use as product-direction and failure-history evidence:
 
-Real CI evidence in this session showed:
+- simple/fast/scalable architecture;
+- verify the live path and the actual claim;
+- one shared handler/code path rather than parallel shims;
+- retain useful failure lessons;
+- multimodal/spatial context and X-ray/provenance are valid long-term directions;
+- hook/session/memory/process accretion is a proven failure mode to avoid.
 
-- the active SmolLM2 135M browser path failed the first bounded exact-instruction qualification case in the tested CI Chromium environment;
-- an off-path LFM2.5 1.2B WebGPU Q4 candidate loaded but still could not finish the first tiny bounded response within the 45-second case limit after output was limited to 12 tokens.
+Do **not** import Portals orchestration or complexity into XRAI by default.
 
-This is environment-specific evidence, not a universal quality claim. It is sufficient to stop trying to make tiny browser-local inference the production brain. Keep browser-local inference only as an optional/offline fallback if it later passes measured requirements.
+### Jarvis v1
 
-### Hosted/open server candidates
+Useful historical direction: natural input -> knowledge/tools -> real action -> response. Implementation is obsolete and not a security/architecture template.
 
-The provider-neutral A1 harness remains the correct side-by-side path for OpenResponses-compatible candidates such as Nex-N2.5-Mini, Nemotron 3 Super, conditional GLM-5.3-Flash, and Nex-N2.5-Pro comparison. No candidate wins from a model card or benchmark alone.
+### Jarvis v2
 
-### Puter browser AI candidate
+Strong adjacent principles to preserve in XRAI boundaries:
 
-Current official Puter documentation verifies that Puter.js supports:
+- evidence before confidence;
+- permission before consequence;
+- real states / no theater;
+- provenance-rich memory;
+- typed/versioned contracts;
+- replaceable providers/components;
+- least privilege;
+- clean-sheet decisions based on measured product fit.
 
-- GPT-5.6 Luna through `puter.ai.chat`;
-- function/tool calling;
-- OpenAI web search on supported models;
-- website authentication;
-- optional temporary-user creation via `attempt_temp_user_creation`.
+### Integration stance
 
-Puter's website authentication documentation also explicitly requires `signIn()` to be triggered by a real user action because it opens a popup.
+XRAI should remain independently usable and expose explicit contracts rather than becoming internal Jarvis/Portals state.
 
-An isolated XRAI CI probe opened the Puter auth popup but timed out before authentication completed. Therefore:
-
-- **Puter is not production-qualified**;
-- the CI timeout does **not** prove Puter fails for a real interactive user, because the authentication flow is inherently interactive;
-- the correct next proof is a real browser/user interaction qualification, followed by A1/tool tests, before any production integration.
-
-Do not weaken authentication or fake an authenticated response to make CI green.
-
-### Lifo portable browser execution candidate
-
-`@lifo-sh/core` is documented as a browser/Node sandbox with VFS, shell, Node compatibility, npm, commands, and a programmatic `Sandbox` API. The first isolated XRAI browser integration attempted `@lifo-sh/core@0.10.17` through jsDelivr.
-
-The probe failed before runtime execution with:
+Likely future boundary:
 
 ```text
-SyntaxError: The requested module '/npm/@jridgewell/sourcemap-codec@1.5.3/+esm'
-does not provide an export named 'encode'
+Jarvis policy/identity/approvals
+        |
+ versioned MCP / typed XRAI task contract
+        |
+XRAI reasoning/retrieval/tools/evidence
+        |
+ optional Portals spatial context + X-ray visualization
 ```
 
-Therefore:
+A2A is later-only if true autonomous peer-agent delegation is materially cleaner than MCP tools/tasks.
 
-- the exact jsDelivr ESM integration path is **FAIL**;
-- Lifo itself is **not globally disqualified**, because this was a packaging/import-path failure before its sandbox could be exercised;
-- do not replace WebContainer with Lifo until a supported build/package integration passes a real browser Node/npm/test proof on claimed devices.
+## Current standards/framework direction
 
-Production was not changed by this probe.
+- **Agent Skills:** target compatibility with the open directory format for portable skill packages, but keep XRAI quarantine/provenance/held-out verification/rollback as the trust layer.
+- **MCP:** new work should follow the current specification and stateless/self-describing design; do not build new architecture around deprecated historical protocol assumptions.
+- **OpenAI Agents SDK for TypeScript:** best current P1 framework comparison because it is small, TypeScript-native, and covers tools/sessions/HITL/tracing/sandbox patterns. Benchmark against XRAI's current kernel before adopting.
+- **LangGraph:** durability/checkpoint semantics are useful reference material; do not introduce a graph runtime unless it is objectively simpler than the required XRAI state machine.
+- **smolagents:** useful simplicity/security reference, not a reason to migrate XRAI to Python.
+- **CrewAI / larger multi-agent stacks:** popular but not the default design for XRAI; multi-agent complexity must beat the single-agent baseline.
 
-## What to keep / refactor / avoid
+See `AGENT_ARCHITECTURE_RESEARCH_2026-09-13.md` for the dated evidence.
 
-| Subsystem | Decision | Reason |
-| --- | --- | --- |
-| `web/conversation-context.js` | KEEP | Goal/follow-up state already handles retry, status interruptions, and continuations usefully. |
-| Existing XRAI KB retrieval | KEEP for P0 | It is genuinely wired and provides useful grounding; improve only after the working vertical slice. |
-| Retrieval boundary | FORMALIZE | Curated docs, research, skills, semantic retrieval, and graph relationships should plug into one provenance-aware interface. |
-| Holograim structural graph patterns | DEFER to P2 | Useful for topology/provenance, not required to get XRAI working tonight. |
-| Browser ordinary chat mini-swarm | REPLACED | Planner/worker/evaluator/self-promotion added calls without real tools. Browser chat is now one context + retrieval + model turn. |
-| `src/kernel.js` | KEEP + REFACTOR | Strongest existing real model/tool loop; should converge toward shared core semantics. |
-| Model/provider binding | REFACTOR after qualification | Introduce a small provider seam rather than hard-coding another vendor. |
-| Browser local inference | KEEP as optional fallback | Not the primary-brain architecture. |
-| Browser web research | KEEP as tool adapter | Real source-linked research is useful; it should feed the same task loop. |
-| `web/browser-workspace.js` WebContainer | KEEP for supported path | Real public Node/JS/TS install/test/edit/reverify. Do not replace until another execution adapter proves better. |
-| Lifo candidate | RESEARCH ONLY | First CDN integration failed before sandbox execution. |
-| Puter candidate | RESEARCH / interactive proof next | Official capabilities are promising; CI auth is not a valid full-user qualification. |
-| Skill ledger | KEEP semantics, finish integration | Promotion requires source verification + held-out transfer improvement. |
-| Model evaluator scores | ADVISORY ONLY | Never execution evidence or promotion evidence. |
-| Host shell | ISOLATE before remote exposure | Workspace-rooted host processes are not an OS security sandbox. |
-| Host run state | REFACTOR | In-memory Map is not restart durability. |
-| Event/provenance UI | KEEP | Valuable when evidence labels remain truthful; later graph work should feed it rather than replace it. |
-| MCP / CLI / browser | KEEP interfaces | They should converge on shared task/tool/evidence semantics. |
-| Default multi-agent orchestration | AVOID | Add specialized workers only if evals demonstrate measurable benefit. |
-| Large agent framework migration | DEFER | Current blockers do not justify wholesale migration. |
+## P0 — get public XRAI working
 
-## P0 - working public XRAI tonight
+Do these in order and do not expand scope until the preceding blocker is closed:
 
-The priority is a working qualified vertical slice, not architectural completeness.
+1. **Qualify the primary reasoning path.** First try the interactive Puter proof because it matches the no-user-model-key browser goal without exposing an operator key. If it fails or has unacceptable limits/privacy, continue the existing provider-neutral hosted candidate harness. Do not return to tiny-model tuning.
+2. **Preserve the existing KB.** Verify at least one relevant-KB task against a no-KB baseline through the qualified model path. No vector DB or graph project tonight.
+3. **Keep real tools real.** Preserve source-linked research and WebContainer execution where it is already proven. Do not fake mobile repo execution or substitute model prose for tool receipts.
+4. **Run end-to-end acceptance.** Ordinary conversation, retry/context continuity, research, repo inspect/test/repair, patch, bounded failures, reload/recovery, console/network behavior, and exact revision identity.
+5. **Verify claimed devices separately.** Mobile chat support and mobile Node/npm execution are separate claims. Physical iPhone/Safari and Android evidence is required before claiming full support.
+6. **Deploy only the exact qualified revision.** Then repeat the live checks against the deployed revision.
 
-1. **Capable reasoning path.** Qualify a primary browser-accessible reasoning path that needs no user model API key and does not expose an operator secret. Do not weaken A1/A11 to get there.
-2. **Existing KB stays active.** Preserve and test XRAI knowledge retrieval with the qualified reasoning path. Do not build a new vector/graph stack tonight.
-3. **Real tools stay real.** Preserve source-linked research and the currently proven WebContainer repo lane where supported. Any alternative execution adapter must first pass an isolated browser proof.
-4. **Separate mobile chat from mobile execution claims.** A good mobile reasoning experience does not automatically prove a Node/npm sandbox on mobile. Report each capability from actual evidence.
-5. **End-to-end qualification.** Exercise ordinary conversation, context/retry, research, repo inspection/test/repair, patch output, error behavior, reload/recovery, console/network behavior, and exact build identity.
-6. **Deploy exact revision only after gates pass.** Production remains unchanged when a candidate probe fails.
-7. **Real-device check.** Physical iPhone/Safari and Android evidence is required before claiming those devices fully supported.
+Nothing else blocks P0: not Holograim, not semantic memory, not Agent Skills packaging, not Jarvis/Portals integration, not A2A, not a framework migration.
 
-### P0 decision rules
+## P1 — coherent and standards-aligned core
 
-- Puter: run an interactive user-auth proof, then A1/tool/web-search checks. Adopt only if those pass and privacy/limits are acceptable.
-- Lifo: do not retry the same failed CDN integration. Only test a supported packaging path if doing so is cheaper than keeping WebContainer for the release.
-- OpenResponses hosted candidates: continue the existing A1 harness path when an authorized candidate credential/endpoint is available.
-- Tiny local browser models: do not spend tonight tuning them as the primary brain.
-- Holograim/knowledge graph: not on the critical path.
+After P0 is actually live:
 
-## P1 - stabilize the coherent agent
+1. Put the winning model/provider behind a capability adapter.
+2. Converge browser/CLI/MCP/host on one task/session/tool/evidence semantics.
+3. Compare the current TypeScript kernel with a narrow OpenAI Agents SDK TS prototype on A1/A4/A7/A9 before writing more generic orchestration/session/sandbox/tracing code.
+4. Align touched MCP surfaces with the current MCP specification.
+5. Add Agent-Skills-compatible packaging with XRAI's stricter evidence/trust layer.
+6. Run authentic A4 repo repair and A8 held-out skill-transfer improvement/rollback.
+7. Make host checkpoints genuinely restart-durable and idempotent.
+8. Curate/sync verified knowledge, add freshness/trust metadata, and establish A12 baselines.
+9. Stabilize typed/versioned task/evidence/artifact contracts for future Jarvis/Portals adapters.
 
-After P0 is actually live and verified:
+## P2 — earned semantic + structural memory
 
-1. put the winning model/provider behind a small provider-capability adapter;
-2. converge browser/CLI/MCP/host on one task/session/tool/evidence loop;
-3. run authentic A4 broken-repository repair with protected tests;
-4. run full A8 held-out skill-transfer improvement and rollback;
-5. make host run state/checkpoints restart-durable and verify no duplicate side effects;
-6. curate/sync more verified XRAI knowledge and add explicit freshness/trust metadata;
-7. establish A12 baseline measurements for retrieval versus no retrieval.
+- Add semantic retrieval only if A12 shows lexical retrieval is a material limiter.
+- Reuse Holograim/Portals structural and X-ray ideas behind the same retrieval/provenance seam.
+- Link files, tasks, runs, sources, skills, verifier receipts, artifacts, and outcomes with explicit typed relations.
+- Compare hybrid retrieval against no-retrieval and lexical-only baselines for success, latency, context size, and reliability.
+- Audit/version the real XRAI interchange schema/loader/saver before other products claim XRAI compatibility.
 
-## P2 - hybrid semantic + structural memory
+## P3 — broader autonomy and ecosystem integration
 
-Only after P0/P1 evidence:
+- Jarvis adapter via explicit typed/MCP contracts.
+- Portals spatial/multimodal context + provenance visualization adapter.
+- A2A only if genuine peer-agent discovery/delegation is needed.
+- Longer workflows, more runtimes, and specialist workers only when evals beat the simpler baseline.
 
-1. add semantic retrieval if A12 shows lexical retrieval materially limits relevant tasks;
-2. reuse Holograim crawler/graph patterns for repository/source topology behind the same retrieval seam;
-3. represent typed links among files, sources, tasks, runs, skills, verifier receipts, and outcomes;
-4. expose those relations through the existing X-ray provenance UI;
-5. compare hybrid retrieval against lexical-only/no-retrieval baselines for task success, context size, latency, and reliability;
-6. keep graph visualization optional unless it proves task-value, not merely visual appeal.
+## Verification matrix
 
-## P3 - broader capability
-
-Only after the foundations are repeatably successful: richer long-horizon workflows, additional execution environments, specialist workers, broader domain skills, and more advanced spatial/visual knowledge experiences.
-
-## State-of-the-art architecture conclusions retained
-
-### Agent loop: stay simple
-
-`SWE-agent/mini-swe-agent` remains a useful reference: a compact bounded loop queries the model, executes explicit actions, appends observations, and saves trajectory state. Its environment executes commands independently rather than hiding state in a persistent shell.
-
-**XRAI takeaway:** one capable model/tool loop with hard limits, explicit observations, and independent verifier receipts is the default. Do not encode a swarm to compensate for an unqualified model.
-
-### Generic hosted-agent machinery already exists
-
-OpenRouter's current TypeScript `@openrouter/agent` SDK supports OpenResponses, tools, stop conditions, approvals, state, timeouts/concurrency, async tasks, streaming, MCP integration, and loop protection.
-
-**XRAI takeaway:** compare it with XRAI's existing small kernel only if generic hosted-loop machinery becomes a real burden. Do not add it for feature count.
-
-### Durable capability seams are proven patterns
-
-DeepSeek Harness makes model adapters, tools, session log, agent loop, filesystem/subprocess/sandbox and persistence replaceable capabilities; durable session events reconstruct model-visible state.
-
-**XRAI takeaway:** adopt the boundary ideas without importing the whole harness unless a controlled comparison proves the migration worthwhile.
-
-## Changes already implemented in PR #9
-
-### Evidence-gated reusable learning
-
-`src/skills.js` enforces source verifier -> quarantined candidate -> different related task -> no-skill baseline -> candidate reuse -> objective verifier -> measurable improvement -> promote. Model scores and repeated proposals cannot promote a skill. Legacy promotions without held-out evidence are quarantined; verified regressions can restore a prior verified version.
-
-### Browser chat simplified
-
-Ordinary browser conversation uses bounded context + relevant knowledge + eligible transfer-verified skills + one model answer turn. It cannot truthfully claim repo execution, deployment, or new learning on that chat-only path.
-
-### Sandbox verification separated from learning
-
-The WebContainer path performs real import -> dependency install -> baseline commands -> bounded edit -> re-verification -> patch output. Passing sandbox commands are execution evidence only; they do not automatically become retained learning, commits, or deployment.
-
-### Release inference gate strengthened
-
-`test/model-qualification.e2e.mjs` checks exact instruction following, arithmetic, conversation recall, structured tool arguments, code diagnosis, and code repair JSON. Pages release preflight blocks deployment if the active browser inference path fails.
-
-### Provider-neutral remote-candidate harness
-
-`test/remote-model-qualification.mjs` + `npm run qualify:remote-model` provide an opt-in OpenResponses candidate path without changing production inference or using production credentials implicitly.
-
-### Knowledge/memory architecture now explicit
-
-`SPEC.md` v0.2 now defines:
-
-- existing KB retrieval as a P0 capability to preserve;
-- one provenance-aware retrieval seam;
-- A12 retrieval effectiveness acceptance testing;
-- semantic retrieval as evidence-gated P2 work;
-- Holograim structural graph reuse as P2, not tonight's blocker.
-
-## Verification status matrix
-
-| Product goal | Status | Evidence / blocker |
-| --- | --- | --- |
-| Goals-first master SPEC | PASS | SPEC v0.2 defines outcomes, knowledge contract, research invariant, acceptance cases, and priorities. |
-| Follow-up goal/context handling | PASS (source) | Existing regression coverage. |
-| XRAI KB is wired into browser chat | PASS (source) | Five seed files are loaded/chunked/ranked and supplied with conversation + eligible skills. |
-| Retrieval quality is optimal | NOT YET VERIFIED | Lexical retrieval and tiny corpus; requires A12 comparison. |
-| Holograim structural graph implementation exists | PASS (related repo evidence) | Filesystem/web/S3/GDrive crawler, SQLite, graph JSON, hierarchy/visualization documented. |
-| Holograim integrated into xrai-agent | FAIL / not present | No current integration; intentionally deferred. |
-| Model self-score cannot become learning proof | PASS | Evidence semantics + tests. |
-| Browser -> host submission contract | PASS | Real browser/HTTP/Node subprocess CI path. |
-| Public repo sandbox executes verifier commands | PASS (mechanism) | Existing WebContainer exit-code evidence. |
-| Sandbox verification distinct from learning/deploy | PASS | Explicit semantics + regression protection. |
-| Held-out transfer required before skill promotion | PASS (module) | Different-task + baseline-improvement + re-verification tests. |
-| Shared agent/tool loop across browser/CLI/MCP | FAIL | Multiple loops still exist. |
-| Durable host restart recovery | FAIL | Run manager remains in-memory. |
-| Qualified primary inference path | FAIL / unresolved | Browser-local path fails CI A1; hosted/browser candidates are not yet qualified. |
-| Puter official needed primitives exist | PASS (research) | GPT-5.6 Luna, tools, web search, website auth/temp-user option documented. |
-| Puter real-user XRAI path | NOT YET VERIFIED | CI popup opened but interactive auth did not complete; needs real-user browser proof. |
-| Lifo jsDelivr integration | FAIL | Dependency export mismatch before sandbox execution. |
-| Lifo as alternative browser runtime | NOT YET VERIFIED | Different supported packaging path would need full proof; not P0 unless required. |
-| Authentic model-generated broken-repo repair | NOT YET VERIFIED | Requires qualified reasoning path + protected fixture. |
-| Real reusable procedure improves held-out task | NOT YET VERIFIED | Module gate exists; full experiment not yet executed. |
-| Physical Android | NOT YET VERIFIED | Responsive Chromium is not physical-device evidence. |
-| Physical iPhone/Safari | NOT YET VERIFIED | Must test real Safari/device. |
-| Current branch deployed | NOT YET VERIFIED | Pages deploys from master and release gate remains active. |
-| Full SPEC vertical slice | NOT YET VERIFIED | P0 reasoning path + real-device/deployed evidence still blockers. |
-
-## Exact next engineering step
-
-Do **not** start the knowledge graph implementation yet.
-
-The next engineering work should be the cheapest real P0 route to a qualified browser reasoning path while preserving the existing KB and real execution adapters:
-
-1. run the Puter path in an actual interactive browser/user-auth flow because the official API requires a user gesture and the CI popup test cannot complete that proof;
-2. if Puter authenticates, run the same six A1 behaviors plus function-call and web-search checks and record exact model/provider/results;
-3. if it fails or its limits/privacy are unacceptable, continue the existing provider-neutral hosted/OpenResponses A1 comparison rather than returning to tiny local-model tuning;
-4. keep WebContainer for the currently proven supported repo lane unless it is the actual blocker; do not spend P0 time repairing Lifo CDN packaging if WebContainer is sufficient;
-5. preserve KB retrieval through the chosen brain and verify at least one relevant-KB vs no-KB task before calling knowledge integration healthy;
-6. then run the full deployed revision checks, including physical mobile where claimed.
-
-Only after P0 is live should the work proceed to shared-core durability/A4/A8 and then A12-driven semantic/graph upgrades.
+| Goal | Status |
+| --- | --- |
+| SPEC v0.3 goals/acceptance/priorities | PASS — documented |
+| XRAI KB wired into browser chat | PASS — source verified |
+| Retrieval quality optimal | NOT YET — requires A12 |
+| Evidence-gated skill promotion semantics | PASS — module/tests |
+| Model self-score rejected as execution proof | PASS |
+| Browser -> host transport contract | PASS |
+| WebContainer verifier-command mechanism | PASS for supported path |
+| Primary qualified public reasoning path | **BLOCKER / NOT YET** |
+| Puter real-user auth + A1/tools/search | NOT YET |
+| Lifo tested jsDelivr integration | FAIL — do not promote |
+| Shared browser/CLI/MCP/host core | NOT YET |
+| Genuine host restart durability | NOT YET |
+| Authentic model-generated A4 repair | NOT YET |
+| Full A8 held-out reuse experiment | NOT YET |
+| A12 retrieval comparison | NOT YET |
+| Agent Skills compatibility | P1, NOT YET |
+| Current-MCP alignment audit | P1, NOT YET |
+| Jarvis/Portals integration contract | P1/P3, NOT YET |
+| Physical iPhone/Safari | NOT YET |
+| Physical Android | NOT YET |
+| Branch deployed | NO |
+| Full public vertical slice | **NOT YET** |
 
 ## Promotion safety
 
-Before any merge:
+Before merge or deploy:
 
-1. fetch current `master` again;
-2. inspect the latest branch CI after the final commit;
-3. preserve concurrent work;
-4. keep PR #9 draft while P0/full vertical-slice blockers remain;
-5. never describe source green as deployment green;
-6. do not convert a research candidate into a production dependency from docs or a partial probe;
-7. after a future merge, verify Pages preflight, deployment, exact revision, desktop flows, and claimed real-mobile flows separately.
+1. re-fetch `master` and compare against the branch;
+2. require latest source CI green on the final branch head;
+3. preserve concurrent work and rollback;
+4. keep PR #9 draft while the primary reasoning path/full vertical slice is unresolved;
+5. never call source CI "deployment verification";
+6. never promote a provider/runtime/framework/skill/graph from docs, stars, model cards, or partial probes;
+7. verify the exact deployed revision and each claimed desktop/mobile capability after deployment.
+
+## Exact next action
+
+**Interactive Puter qualification is the cheapest current P0 proof.** If it succeeds, immediately run XRAI A1 + tools + web-search qualification and then integrate it behind a small browser model adapter while preserving the current KB and real execution lanes. If it fails, record the specific reason and move directly to the existing provider-neutral hosted-candidate harness. Do not branch into graph/framework/runtime research unless one of those is the demonstrated blocker.
