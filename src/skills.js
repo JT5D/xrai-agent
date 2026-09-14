@@ -103,7 +103,7 @@ export function isSafeVerifier(command){
 function allSkills(store){return [...store.versions.values()]}
 function activeSkills(store){return allSkills(store).filter(s=>s.status==='promoted'&&s.transferVerified===true)}
 function currentForId(store,id){return allSkills(store).filter(s=>s.id===id).sort((a,b)=>b.version-a.version)[0]}
-function priorPromoted(store,id,version){return activeSkills(store).filter(s=>s.id===id&&s.version<version).sort((a,b)=>b.version-a.version)[0]}
+function priorPromoted(store,id,version){return allSkills(store).filter(s=>s.id===id&&s.version<version&&s.transferVerified===true&&['promoted','superseded'].includes(s.status)).sort((a,b)=>b.version-a.version)[0]}
 function skillQuality(skill){if(!skill)return null;const usage=mean(skill.usageScores);return usage===null?null:usage}
 function similar(store,candidate){return allSkills(store).map(s=>({s,sim:jaccard(`${s.title} ${s.trigger} ${(s.tags||[]).join(' ')}`,`${candidate.title} ${candidate.trigger} ${(candidate.tags||[]).join(' ')}`),proc:jaccard(s.procedure,candidate.procedure)})).sort((a,b)=>b.sim-a.sim)[0]}
 
