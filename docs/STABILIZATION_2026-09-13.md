@@ -33,3 +33,18 @@ No further publishing or recurring experiments are authorized by this status doc
 The patch exporter now writes a complete unified diff instead of a truncated display preview. Exports beyond the existing 50,000-character storage limit fail explicitly rather than producing corrupt patches. The download control is in the chat composer so mobile layouts do not hide it, and its object URL is released after the click rather than immediately.
 
 `test/patch-export.e2e.mjs` checks eight real `git apply` round trips and rendered downloads at 1440 and 390 pixels. It seeds a UI result deliberately: it does not claim model-generated repair. Run it with Playwright installed: `node test/patch-export.e2e.mjs`; pass the public app URL to verify deployment. The public default model remains an inference-quality blocker; no failed alternative model is promoted by this change.
+
+## Inference qualification and release protection
+
+The subsequent qualification pass isolated application code from model behavior:
+
+- Pinned explicit-template comparisons: run `34790624508`, source commit `06830714271c674701a31fa6ab053583e71886ea`. Qwen2.5 0.5B with Transformers.js 3.8.1 and Qwen3 0.6B with 4.2.0, both on WASM, failed instruction/repair qualification. The matrix artifact named `reference-gpu` actually used WASM, correctly recorded inside its report; do not treat its name as GPU evidence.
+- Native full-precision reference: run `34790854875`, artifact `precision-native-fp32`. Qwen/Qwen3-0.6B with PyTorch 2.7.1, Transformers 4.51.3, FP32 and thinking disabled returned `2` for the same `2 + 2` question, outside XRAI and the browser. Its proposed repair did not fix the subtraction bug. This shows the Qwen3 failure is not solely an XRAI, browser, GPU or quantization problem; it does not establish one common cause for every previously tested model.
+- The same run's browser Q8 candidate gave mathematically correct answers but violated requested formats and returned a patch whose search text was absent from the source. It did not qualify.
+- Documented reasoning configuration: run `34790977598`, artifact `reasoning-capability-reference`. Qwen3 0.6B on WASM q4 with thinking enabled, temperature 0.6, top-p 0.95 and top-k 20 answered `4`, but that case took 111966 ms. The probe hit its 240-second deadline before completing repair verification. A correct but extremely slow arithmetic response is not a qualified interactive repair agent.
+
+No replacement from this qualification pass was deployed. A locally prepared full agent fixture E2E was not executed; it must not be reported as passing.
+
+PR #7 merged as `70807409394f266f3b6ce344fcd6755768a2e345`. The release workflow now runs the existing real model-runtime canary before publication and makes `deploy` depend on it. PR source CI and merged-source CI passed. In run `34791314550`, the real SmolLM2 WebGPU response was again `1 + 2 = 3`, with no browser page errors; preflight failed and deployment was skipped. This verifies release protection, not model correctness. The concurrent v0.3.51 patch-export work was preserved.
+
+The remaining decision is to qualify a more capable inference configuration/provider against the actual workload, rather than add more routing patches or call loading a model a success. Preserve the visitor-no-key goal. Require real instruction following, multi-turn context and failing-test -> generated patch -> unchanged tests pass -> durable evidence. Require successful evidence-backed skill reuse on a distinct task before claiming compounding learning. A single arithmetic release canary is a minimum guard, not sufficient evidence of general repair capability. Physical iPhone/Safari and device memory behavior remain unverified.
