@@ -75,7 +75,7 @@ export async function startWebServer(port=Number(process.env.XRAI_PORT||8787),ho
     if(url.pathname==='/api/events')return json(res,200,bus.events.slice(-500));
     if(url.pathname==='/api/skills')return json(res,200,await skillStats(process.env.XRAI_WORKSPACE||process.cwd()));
     if(url.pathname==='/api/runs/latest')return json(res,200,runManager.latest());
-    if(url.pathname==='/api/runs')return json(res,200,runManager.list());
+    if(url.pathname==='/api/runs'&&req.method==='GET')return json(res,200,runManager.list());
     const runMatch=url.pathname.match(/^\/api\/runs\/([a-f0-9-]+)$/i);
     if(runMatch){const state=runManager.get(runMatch[1]);return state?json(res,200,state):json(res,404,{error:'run not found'})}
     if(url.pathname==='/api/capabilities'){
@@ -89,7 +89,7 @@ export async function startWebServer(port=Number(process.env.XRAI_PORT||8787),ho
         mcp:'/mcp'
       });
     }
-    if(url.pathname==='/api/run'&&req.method==='POST'){
+    if((url.pathname==='/api/runs'||url.pathname==='/api/run')&&req.method==='POST'){
       const input=await body(req);
       if(!input.task||typeof input.task!=='string')return json(res,400,{error:'task is required'});
       const state=runManager.start(input.task,{workspace:input.workspace,retries:input.retries??1,maxDepth:input.maxDepth??2,maxChildren:input.maxChildren??2});

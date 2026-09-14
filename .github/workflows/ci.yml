@@ -24,3 +24,14 @@ jobs:
         with:
           node-version: 20
       - run: npm run check
+      - name: Verify browser-to-server execution contract
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          node test/server-ui.e2e.mjs
+      - name: Upload execution contract evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-ui-contract
+          path: artifacts/server-ui/
+          retention-days: 7
