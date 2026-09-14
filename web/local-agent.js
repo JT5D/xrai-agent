@@ -61,7 +61,7 @@ async function transformersModel(onProgress,preferFast=true){
   const load=async profile=>{
     onProgress?.(`Loading ${profile.label} · ${profile.device.toUpperCase()}…`);
     const generator=await pipeline('text-generation',profile.modelId,{device:profile.device,dtype:profile.dtype,progress_callback:p=>{if(p?.progress!=null)onProgress?.(`Downloading local model ${Math.round(p.progress)}%`);else if(p?.status)onProgress?.(String(p.status))}});
-    return{name:`${profile.label} · ${profile.device.toUpperCase()}`,prompt:async messages=>normalizeGenerated(await generator(messages,{max_new_tokens:profile.maxNewTokens,do_sample:false,repetition_penalty:1.05}))};
+    return{name:`${profile.label} · ${profile.device.toUpperCase()}`,prompt:async(messages,callOptions={})=>normalizeGenerated(await generator(messages,{max_new_tokens:Math.max(1,Math.min(profile.maxNewTokens,Number(callOptions.maxNewTokens)||profile.maxNewTokens)),do_sample:false,repetition_penalty:1.05}))};
   };
   return withWebGpuFallback(load,preferred,onProgress);
 }
