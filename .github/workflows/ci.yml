@@ -35,36 +35,3 @@ jobs:
           name: server-ui-contract
           path: artifacts/server-ui/
           retention-days: 7
-
-  # Advisory only. Production inference remains protected by the required
-  # pre-publication model-runtime gate in pages.yml. This job evaluates one
-  # evidence-backed stronger browser candidate without changing public defaults.
-  model-candidate-observation:
-    continue-on-error: true
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Install browser runner
-        run: npm install --no-save --ignore-scripts playwright@1.56.1
-      - name: Qualify LFM2.5 1.2B Instruct off-path
-        shell: bash
-        run: |
-          python3 -m http.server 8765 --bind 127.0.0.1 --directory web > /tmp/xrai-candidate.log 2>&1 &
-          server=$!
-          trap 'kill "$server" 2>/dev/null || true' EXIT
-          for n in 1 2 3 4 5; do curl -fsS http://127.0.0.1:8765/ > /dev/null && break || sleep 1; done
-          xvfb-run -a node test/model-qualification.e2e.mjs http://127.0.0.1:8765/ lfm12b
-      - name: Upload candidate-model evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: model-qualification-lfm12b-candidate
-          path: artifacts/model-qualification-lfm12b/
-          if-no-files-found: warn
-          retention-days: 7
