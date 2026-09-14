@@ -22,7 +22,11 @@ export async function getLfm12bCandidate(onProgress=()=>{}){
     });
     return{
       name:'LFM2.5 1.2B Instruct · WebGPU Q4 · candidate',
-      prompt:async messages=>normalizeGenerated(await generator(messages,{max_new_tokens:256,do_sample:false,repetition_penalty:1.05}))
+      prompt:async(messages,options={})=>normalizeGenerated(await generator(messages,{
+        max_new_tokens:Math.max(1,Math.min(256,Number(options.maxNewTokens)||256)),
+        do_sample:false,
+        repetition_penalty:1.05
+      }))
     };
   })().catch(error=>{lfm12bPromise=null;throw error});
   return lfm12bPromise;
