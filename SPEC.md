@@ -1,12 +1,12 @@
 # XRAI Agent - goals and acceptance specification
 
-Working specification v0.1, 2026-09-13. Repository: JT5D/xrai-agent only.
+Working specification v0.3, 2026-09-13. Repository: JT5D/xrai-agent only.
 
 ## Authority and provenance
 
-This is a goals-first working reconstruction, not a claim to reproduce the initial creation prompt. That prompt was not recovered. Sources are the user's creation/repair discussion available on 2026-09-13, the supplied failure transcript, README.md, and knowledge/MISSION.md. No master goals-and-acceptance specification was found in the inspected current tree or retrieved Library material; that does not prove none ever existed elsewhere.
+This is a goals-first working reconstruction, not a claim to reproduce the initial creation prompt. That prompt was not recovered. Sources are the user's creation/repair discussion available on 2026-09-13, the supplied failure transcript, README.md, knowledge/MISSION.md, the current `xrai-agent` implementation, and verified related repository evidence where explicitly identified. No master goals-and-acceptance specification was found in the inspected current tree or retrieved Library material; that does not prove none ever existed elsewhere.
 
-Current explicit user goals take precedence. This document defines outcomes and boundaries; implementation choices remain replaceable. docs/HANDOFF.md records the architectural assessment and incomplete work, not an approved final technology stack. This spec is not evidence that any capability already works.
+Current explicit user goals take precedence. This document defines outcomes and boundaries; implementation choices remain replaceable. docs/HANDOFF.md records the architectural assessment, verified status, priority plan, and incomplete work, not an approved final technology stack. Dated external and adjacent-project research is recorded in `docs/MODEL_RUNTIME_RESEARCH_2026-09-13.md`, `docs/AGENT_ARCHITECTURE_RESEARCH_2026-09-13.md`, and `docs/RUNTIME_CANDIDATE_PROBE_2026-09-13.md`. This spec is not evidence that any capability already works.
 
 ## Purpose
 
@@ -21,14 +21,107 @@ A small, transparent, extensible agent that augments human creativity and proble
 5. **Durable context and recovery.** Retain the active goal, accepted plan, relevant conversation, run identity, artifacts, and verification evidence. Status questions must not replace the goal. Reloading must not repeat a completed side effect. Distinguish saved UI history, browser interruption recovery, and genuine host restart durability.
 6. **Compounding improvement.** Turn useful failures and successes into regression cases and narrow reusable skills. Retrieve these in actual future work. Promote versions only on relevant external evidence; compare against a baseline on held-out tasks, preserve provenance, and roll back regressions. A higher self-rating or larger skill count is not proof of learning.
 7. **Transparent control.** Show concise progress, actual tool actions, bounded resource use, exact scope, and honest completion states. Distinguish proposed, attempted, sandbox-verified, committed, and deployed. Stop cleanly on cancellation, unavailable permissions, exhausted budgets, or irrecoverable errors.
+8. **Grounded knowledge and memory.** XRAI should use curated project knowledge, current task/session state, source-linked research, verified reusable skills, and structural repository relationships through one retrieval boundary. Retrieval must preserve provenance and trust level. A knowledge graph is an enhancement to retrieval and provenance, not a substitute for a capable model, real tools, or independent verification.
+9. **Independent but interoperable core.** XRAI should remain independently usable and testable while exposing versioned, typed boundaries that Jarvis, Portals, IDEs, MCP clients, and future agents can consume. Integration must not mean copying another project's orchestration, hidden state, permissions, or failure modes into XRAI.
 
 ## Learning and autonomy boundaries
 
-Conversation memory, reusable procedures, tested code changes, and model-weight training are different mechanisms. This product primarily targets the first three; do not imply weight updates or unbounded recursive intelligence growth.
+Conversation memory, curated knowledge, structural graph indexes, reusable procedures, tested code changes, and model-weight training are different mechanisms. This product primarily targets the first five; do not imply weight updates or unbounded recursive intelligence growth.
 
 Use one capable agent loop by default. Add workers or recursive decomposition only when measured benefit exceeds coordination, latency, and cost. Improve the verifier and tool interface before optimizing an unreliable self-rating loop.
 
-Treat repository text, search results, and imported skills as untrusted inputs. Tool permissions, credentials, execution isolation, budgets, protected evaluation cases, and production promotion remain outside generated skill/code control. The agent may propose changes to these boundaries for human review, not expand its own authority. Local shell working-directory selection alone is not a security sandbox.
+Treat repository text, search results, knowledgebase entries, graph nodes/edges, and imported skills as untrusted inputs unless separately verified. Tool permissions, credentials, execution isolation, budgets, protected evaluation cases, and production promotion remain outside generated skill/code control. The agent may propose changes to these boundaries for human review, not expand its own authority. Local shell working-directory selection alone is not a security sandbox.
+
+### Knowledge, retrieval, and graph-memory contract
+
+The current browser implementation already loads the XRAI seed knowledge files `MISSION.md`, `KEY_LEARNINGS.md`, `SYSTEM_PATTERNS.md`, `AGENTIC_CODING_EVALS_2025_2026.md`, and `UNVERIFIED.md`, chunks them, scores them with simple lexical overlap, retrieves relevant passages, and combines them with eligible transfer-verified skills and bounded conversation context before a model turn. That is **verified source wiring**, not proof that retrieval quality is optimal.
+
+The current seed corpus is intentionally small and lexical retrieval is primitive. Therefore:
+
+1. preserve the working knowledgebase path during the P0 stabilization pass;
+2. do not ask a weak model to compensate for poor reasoning by adding more context indiscriminately;
+3. keep one retrieval interface so curated documents, live research, verified skills, semantic retrieval, and structural graph retrieval can evolve independently;
+4. attach source/provenance, freshness, trust level, and verification status to retrieved evidence;
+5. prefer a small relevant context set over dumping an entire knowledgebase or graph into the prompt;
+6. measure retrieval usefulness on actual XRAI tasks before adding embeddings, vector databases, graph databases, or another memory framework;
+7. when knowledge conflicts, prefer fresher verified evidence and surface the conflict rather than silently merging it.
+
+`JT5D/holograim` is a verified related implementation reference for high-performance filesystem/web/S3/Google Drive crawling, SQLite output, graph JSON with nodes/edges/hierarchy, and force/tree/sunburst visualization. It is **not currently wired into `xrai-agent`** and its present documented role is structural crawling/visualization, not a proven semantic agent-memory system. Reuse its proven structural indexing and visualization patterns only through the retrieval/provenance seam after P0. Do not migrate the full Holograim stack into XRAI merely because it exists.
+
+The intended later hybrid is:
+
+```text
+active goal + session state
+        |
+retrieval boundary
+  | curated XRAI knowledge
+  | source-linked live research
+  | transfer-verified skills
+  | semantic retrieval when proven useful
+  | structural graph relations when proven useful
+        |
+small provenance-rich context
+        |
+capable model + real tools
+        |
+independent verifier receipts
+```
+
+### Adjacent-project and interoperability contract
+
+Portals v4, Jarvis v1, and Jarvis v2 are verified directional references and possible future integration targets. Their implementation choices are **not** XRAI authority.
+
+The reusable lessons are:
+
+- from historical Jarvis: natural input should reach real knowledge and real tools with minimal ceremony;
+- from Portals v4: verify the live path and the actual claim, prefer one shared code/handler surface, retain useful failure lessons, keep the top-level operating context small, and preserve the longer-term multimodal/spatial/X-ray direction;
+- from Portals failure history: hook, session, memory, and orchestration accretion can become a reliability and velocity tax, so XRAI should bias toward subtraction and explicit boundaries;
+- from Jarvis v2: evidence before confidence, permission before consequence, real states/no theater, provenance-rich memory, typed/versioned contracts, replaceable architecture, least privilege, and measured clean-sheet decisions are strong adjacent product principles.
+
+Integration ownership is intentionally separated:
+
+```text
+Jarvis
+  owns identity, tenant/user policy, approvals, consequence controls,
+  executive context, and presentation
+        |
+versioned typed MCP/tool contract
+        |
+XRAI
+  owns technical/research task semantics, retrieval, tools,
+  verification receipts, evidence ledger, and verified skills
+        |
+optional adapters
+        |
+Portals / spatial clients
+  provide scoped multimodal/spatial context, execution surfaces,
+  and X-ray/provenance visualization
+```
+
+No repository may treat another repository's private/internal state as its API.
+
+For portable procedural knowledge, prefer compatibility with the open **Agent Skills** directory format (`SKILL.md` plus optional scripts/references/assets and progressive disclosure) instead of inventing another package format. Packaging compatibility does **not** imply trust: imported skills remain untrusted/quarantined until XRAI provenance, source verification, held-out transfer, permissions, and rollback rules are satisfied.
+
+For new MCP work, re-check and target the current MCP specification rather than historical assumptions. The 2026-07-28 specification is the present research baseline: prefer stateless/self-describing semantics, current Streamable HTTP or stdio transport, explicit durable XRAI task IDs/state handles, and current authorization guidance. Do not design new XRAI architecture around deprecated protocol features merely because older clients used them.
+
+A2A is not a P0/P1 dependency. Evaluate the current A2A specification only if XRAI and Jarvis or other systems need to remain independent peer agents that discover one another and delegate durable tasks in ways that are materially cleaner than MCP tools/tasks.
+
+Before claiming Jarvis or Portals compatibility, the actual XRAI interchange schema/loader/saver, versioning behavior, permissions, and migration path must be located or implemented and audited. Do not invent a competing generic graph merely to claim integration.
+
+### Research-before-change invariant
+
+Do not guess, blindly swap models, or invent XRAI-specific machinery where a current proven implementation or standard exists. Before changing a model, provider, agent harness, execution runtime, memory mechanism, retrieval system, knowledge graph, skills format, interoperability protocol, or other material architecture choice:
+
+1. inspect current primary sources and relevant actively maintained open-source implementations;
+2. record the candidate's license, deployability/compute requirements, tool and structured-output support, measured latency/availability when available, privacy/data-use constraints, rate limits, direct operating-cost implications, and current maintenance signal;
+3. distinguish open/free weights from genuinely free hosted inference and distinguish temporary free tiers from production guarantees;
+4. shortlist only candidates compatible with the product constraints, then benchmark them through XRAI acceptance cases rather than choosing from vendor claims, stars, trends, or intuition;
+5. qualify the model, harness, tools, retrieval, and execution environment together, including A1 before general use and A4/A8 before claiming autonomous coding or compounding improvement;
+6. prefer standard, replaceable seams and mature libraries over bespoke infrastructure, but add a dependency or framework only when a controlled XRAI comparison shows a concrete reliability, simplicity, security, performance, or maintenance benefit;
+7. preserve the previous working path until the replacement has objective evidence and a rollback path;
+8. when relevant, inspect Portals/Jarvis adjacent implementations for product intent and historical lessons, but require the same XRAI evidence bar before reuse.
+
+A benchmark table, popularity, model card, successful load, visually impressive graph, repository star count, or successful authentication popup is research evidence, not production qualification. Current research may become stale; re-check material external choices when making future architecture changes.
 
 ## Acceptance contract
 
@@ -47,7 +140,59 @@ These are release goals, not claims of current coverage. Each result must record
 | A9 | Denied operations, malformed tool output, download errors, timeouts, and cancellation produce bounded, truthful outcomes without corrupting memory or exposing secrets. |
 | A10 | Validate desktop and real mobile-browser behavior on claimed supported devices, including startup/download/memory pressure. Mobile-width Chromium does not certify iPhone Safari. |
 | A11 | Qualify model + harness + environment together before release, then verify the exact deployed revision. Preserve source/regression checks and report partial coverage rather than an unsupported all-clear. |
+| A12 | For tasks with relevant XRAI knowledge, retrieval returns a small provenance-rich context set and measurably improves or preserves task success versus no retrieval without hiding stale/conflicting evidence. Structural/graph retrieval must independently demonstrate benefit before becoming a required production dependency. |
+| A13 | Before claiming external integration, a versioned typed boundary can invoke XRAI without importing hidden state or authority; provenance/receipts survive the boundary; imported skills/tools cannot self-grant permissions; and incompatible schema/protocol versions fail explicitly rather than silently degrading. |
+
+## Delivery priority order
+
+Priority is determined by the product outcome, not by architectural novelty.
+
+### P0 - working public XRAI tonight
+
+1. **Qualify a capable primary reasoning path** for the public browser without exposing an operator secret and without weakening A1/A11. Browser-local 135M/350M inference remains fallback-only because the tested CI path failed qualification.
+2. **Preserve and verify existing XRAI knowledge retrieval** in the actual browser conversation path. It should ground the capable model, not become a new infrastructure project tonight.
+3. **Preserve real execution + verification.** Use the already working WebContainer mechanism where supported while evaluating alternative browser execution adapters only behind an isolated proof. Do not replace a working mechanism on README claims alone.
+4. **Make mobile claims evidence-based.** A mobile-friendly reasoning path and actual supported repo execution are separate capabilities; expose each truthfully.
+5. **Deploy only an exact qualified revision**, then re-run live desktop/mobile conversation, research, repo execution, retry/recovery, patch, console/network, and exact-build checks.
+6. **Keep rollback.** If a new inference/runtime candidate does not pass its bounded proof, production remains unchanged.
+
+Current candidate evidence that affects P0:
+
+- Puter documentation currently supports GPT-5.6 Luna, function calling, OpenAI web search, and website authentication including optional temporary-user creation. Website authentication requires a real user-triggered popup. The first CI probe opened the popup but timed out before authentication completed, so Puter is **not yet qualified or disqualified for a real interactive browser session**.
+- The first Lifo browser candidate integration using `@lifo-sh/core@0.10.17` through jsDelivr failed before runtime execution because a bundled dependency export was incompatible. That exact CDN integration path is **failed** and must not be promoted. Lifo itself remains a research candidate only if a supported packaging/integration path passes the same real browser execution proof.
+- No framework migration, Agent Skills integration, knowledge-graph implementation, A2A integration, or Jarvis/Portals adapter is on the P0 critical path.
+
+### P1 - stabilize the coherent, standards-aligned agent after P0
+
+1. Put the qualified model/provider behind a small provider-capability seam; keep provider-specific server tools behind that seam.
+2. Converge browser/CLI/MCP/host on one task/session/tool/evidence loop instead of maintaining separate semantics.
+3. Before writing more generic loop/session/sandbox/tracing machinery, compare the current TypeScript kernel with a narrow current **OpenAI Agents SDK for TypeScript** prototype on XRAI A1/A4/A7/A9. Adopt only if it measurably reduces bespoke complexity or improves reliability without unacceptable lock-in or loss of evidence semantics.
+4. Align new MCP behavior with the current specification and remove reliance on stale/deprecated protocol assumptions as those surfaces are touched.
+5. Add Agent-Skills-compatible import/export/progressive disclosure while retaining XRAI quarantine, provenance, permissions, held-out transfer, and rollback semantics.
+6. Run authentic A4 broken-repo repair and A8 held-out transfer tests through the qualified path.
+7. Make host run/checkpoint state genuinely restart-durable and test duplicate-side-effect prevention.
+8. Improve the knowledgebase deliberately: sync/curate more verified XRAI knowledge, add freshness/provenance metadata, and benchmark retrieval quality before adopting semantic infrastructure.
+9. Stabilize typed/versioned XRAI task/evidence/artifact contracts so future Jarvis/Portals integration can happen without internal coupling.
+
+### P2 - hybrid knowledge graph and richer memory
+
+1. Add semantic retrieval only if A12 shows lexical retrieval is a material limiter.
+2. Reuse Holograim and relevant Portals structural/X-ray ideas for repository/source topology behind the same retrieval interface rather than importing either application's whole stack.
+3. Link files, runs, sources, tasks, skills, verifier receipts, and outcomes with explicit typed edges and provenance.
+4. Use the graph to improve retrieval/navigation and the X-ray provenance UI; do not make visualization itself the evidence of better agent performance.
+5. Promote graph/semantic components only when controlled A12 comparisons improve relevant-task success, latency, or context efficiency without reducing reliability.
+6. Audit and version the real XRAI interchange schema/loader/saver before another product claims XRAI compatibility.
+
+### P3 - broader autonomous/creative capability and ecosystem integration
+
+1. Add richer multimodal/spatial inputs and visualization adapters only after P0-P2 foundations demonstrate repeatable value.
+2. Integrate Jarvis through explicit typed/MCP XRAI contracts while preserving Jarvis ownership of identity/permissions/approvals and XRAI ownership of technical task/evidence semantics.
+3. Integrate Portals as a scoped spatial/multimodal context, execution, and provenance-visualization adapter rather than a second agent architecture.
+4. Evaluate A2A only if true independent peer-agent discovery/delegation is required beyond MCP tool/task semantics.
+5. Expand domains, longer-horizon workflows, additional execution environments, and specialized workers only when controlled task evals beat the simpler single-agent baseline.
 
 ## Next milestone
 
-Complete one genuine research/repair/verification/reuse path through a shared core before adding a framework, swarm, more models, a dashboard rewrite, or autonomous infrastructure changes. A few repeatable meaningful tasks are more valuable than many nominal capabilities. Broader creative and domain skills build on that working path.
+The immediate milestone is a **real, publicly usable, qualified vertical slice**: capable reasoning + existing XRAI knowledge retrieval + source-linked research + real authorized execution + independent verification + durable truthful result presentation. Do not block that milestone on a new knowledge graph, framework migration, swarm, dashboard rewrite, Agent Skills packaging, Jarvis/Portals integration, or speculative model/runtime integration.
+
+After that vertical slice is working, complete one genuine research/repair/verification/reuse path through the shared core; prove A12 retrieval improvements; then implement the smallest standards-aligned interoperability surfaces required by real consumers. A few repeatable meaningful tasks are more valuable than many nominal capabilities.

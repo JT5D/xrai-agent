@@ -6,6 +6,7 @@ on:
     paths:
       - 'web/**'
       - 'knowledge/**'
+      - 'test/model-qualification.e2e.mjs'
       - 'test/live-pages.e2e.mjs'
       - 'test/conversation.e2e.mjs'
       - 'test/status.e2e.mjs'
@@ -24,11 +25,11 @@ concurrency:
 
 jobs:
   preflight:
-    # A loaded model or mocked reply is not a release qualification.
+    # A loaded model, mocked reply, or single lucky arithmetic answer is not a release qualification.
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,22 +39,14 @@ jobs:
           node-version: 22
       - run: npm run check
       - run: npm install --no-save --ignore-scripts playwright@1.56.1
-      - name: Require a correct real model answer before publishing
+      - name: Require qualified real browser inference before publishing
         shell: bash
         run: |
           python3 -m http.server 8765 --bind 127.0.0.1 --directory web > /tmp/xrai-preflight.log 2>&1 &
           server=$!
           trap 'kill "$server" 2>/dev/null || true' EXIT
-          python3 - <<'PYTEST'
-          from pathlib import Path
-          p=Path('test/live-pages.e2e.mjs');s=p.read_text()
-          old="const base=rawBase.replace(/^http:/,'https:').replace(/\/?$/,'/');"
-          new="const base=(rawBase.startsWith('http://127.0.0.1:')?rawBase:rawBase.replace(/^http:/,'https:')).replace(/\/?$/,'/');"
-          assert old in s,'Review changed E2E entrypoint before release'
-          p.write_text(s.replace(old,new,1))
-          PYTEST
           for n in 1 2 3 4 5; do curl -fsS http://127.0.0.1:8765/ > /dev/null && break || sleep 1; done
-          xvfb-run -a node test/live-pages.e2e.mjs http://127.0.0.1:8765/ model-runtime
+          xvfb-run -a node test/model-qualification.e2e.mjs http://127.0.0.1:8765/
       - uses: actions/upload-artifact@v4
         if: always()
         with:
