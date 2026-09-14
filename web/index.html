@@ -15,8 +15,8 @@
       <div><strong>XRAI <em>Agent</em></strong><small>small · recursive · evidence-gated</small></div>
     </div>
     <div class="feature-strip" aria-label="XRAI capabilities">
-      <div><b>∞</b><span>Self-improving<small>verified gains only</small></span></div>
-      <div><b>⌘</b><span>XRAI knowledge<small>promoted skills only</small></span></div>
+      <div><b>∞</b><span>Evidence-driven<small>verified outcomes only</small></span></div>
+      <div><b>⌘</b><span>XRAI knowledge<small>transfer-verified skills only</small></span></div>
       <div><b>◇</b><span>No-key modes<small>browser · Ollama · MCP</small></span></div>
       <div><b>▣</b><span>X-ray provenance<small>inspectable evidence</small></span></div>
     </div>
@@ -39,7 +39,7 @@
           <div><dt>Version</dt><dd>0.3.51</dd></div>
           <div><dt>Mode</dt><dd id="modeLabel">detecting</dd></div>
           <div><dt>Persistence</dt><dd>on</dd></div>
-          <div><dt>Learning</dt><dd>verified-only</dd></div>
+          <div><dt>Learning</dt><dd>host transfer-gated</dd></div>
         </dl>
       </div>
     </aside>
@@ -48,7 +48,7 @@
       <section class="workspace-grid">
         <section class="panel orchestration-panel" id="workspacePanel">
           <div class="panel-header orchestration-head">
-            <div><h1>X-ray View</h1><p>God's-eye view of intent → agents → tools → evidence → learning. Hover to preview, click for exact provenance, expand for detail.</p></div>
+            <div><h1>X-ray View</h1><p>God's-eye view of intent → agents → tools → evidence → retained learning when verified. Hover to preview, click for exact provenance, expand for detail.</p></div>
             <div class="run-controls">
               <span class="live-badge"><span class="status-dot"></span>Live</span>
               <button id="rerun" class="subtle" type="button" disabled>Rerun</button>
@@ -96,7 +96,7 @@
             <div id="activityList" class="mini-activity"><p class="muted">No activity yet.</p></div>
           </section>
           <section class="status-block">
-            <h3>Learning</h3>
+            <h3>Evidence & learning</h3>
             <dl class="learning-stats">
               <div><dt>Score</dt><dd id="score">—</dd></div>
               <div><dt>Attempts</dt><dd id="attempts">—</dd></div>
@@ -113,8 +113,8 @@
       </section>
 
       <section class="focus-panel panel" id="skillsPanel" hidden>
-        <div class="panel-header"><div><h2>Evidence-gated skills</h2><p>Only promoted skills are eligible for retrieval. Candidates stay quarantined.</p></div><button class="subtle back-workspace" type="button">Back to workspace</button></div>
-        <div id="skillsContent" class="info-content"><p class="muted">Skill statistics load when a local execution host is available. Browser-only learning remains on this device.</p></div>
+        <div class="panel-header"><div><h2>Transfer-verified skills</h2><p>Only independently verified transferred skills are eligible for retrieval. Candidates stay quarantined.</p></div><button class="subtle back-workspace" type="button">Back to workspace</button></div>
+        <div id="skillsContent" class="info-content"><p class="muted">Skill statistics load when a local execution host is available. Browser chat may retrieve verified skills, but it does not promote learning from model scores.</p></div>
       </section>
 
       <section class="focus-panel panel" id="runtimePanel" hidden>
@@ -130,7 +130,7 @@
   </div>
 
   <footer class="mode-dock">
-    <div class="dock-title"><span>›_</span><div><strong>Run it your way</strong><small>Same XRAI kernel, different execution host.</small></div></div>
+    <div class="dock-title"><span>›_</span><div><strong>Run it your way</strong><small>Choose the execution path that matches the task and available host.</small></div></div>
     <button type="button" data-runtime-target="runtime"><b>Browser</b><small>No-key repo + chat</small></button>
     <button type="button" data-runtime-target="runtime"><b>Local</b><small>Optional power mode</small></button>
     <button type="button" data-runtime-target="runtime"><b>Claude</b><small>MCP host</small></button>
