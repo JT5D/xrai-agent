@@ -6,8 +6,10 @@ const apiKey=process.env.XRAI_CANDIDATE_API_KEY;
 const model=process.env.XRAI_CANDIDATE_MODEL;
 const timeoutMs=Number(process.env.XRAI_CANDIDATE_CASE_TIMEOUT_MS||45_000);
 const reasoningEffort=(process.env.XRAI_CANDIDATE_REASONING_EFFORT||'').trim();
-if(!apiUrl||!apiKey||!model)throw new Error('Set XRAI_CANDIDATE_API_URL, XRAI_CANDIDATE_API_KEY, and XRAI_CANDIDATE_MODEL. This evaluator never reads production provider credentials implicitly.');
-if(!/^https:\/\//i.test(apiUrl))throw new Error('XRAI_CANDIDATE_API_URL must use HTTPS.');
+if(!apiUrl||!model)throw new Error('Set XRAI_CANDIDATE_API_URL and XRAI_CANDIDATE_MODEL. Set XRAI_CANDIDATE_API_KEY for authenticated remote endpoints. This evaluator never reads production provider credentials implicitly.');
+const endpoint=new URL(apiUrl),loopback=endpoint.protocol==='http:'&&['127.0.0.1','localhost','::1'].includes(endpoint.hostname);
+if(endpoint.protocol!=='https:'&&!loopback)throw new Error('XRAI_CANDIDATE_API_URL must use HTTPS unless it is a loopback HTTP endpoint.');
+if(!apiKey&&!loopback)throw new Error('XRAI_CANDIDATE_API_KEY is required for non-loopback endpoints.');
 if(!Number.isFinite(timeoutMs)||timeoutMs<1_000||timeoutMs>180_000)throw new Error('XRAI_CANDIDATE_CASE_TIMEOUT_MS must be between 1000 and 180000.');
 
 const safeModel=model.replace(/[^a-z0-9_.-]+/gi,'-').replace(/^-+|-+$/g,'').slice(0,96)||'candidate';
@@ -30,9 +32,9 @@ function exact(name,response,expected,ms){
 }
 function toolArgs(name,response,tool,expected,ms){
   const call=functionCall(response,tool);let parsed=null,error=null;
-  try{parsed=call?JSON.parse(call.arguments||'{}'):null}catch(e){error=e instanceof Error?e.message:String(e)}
+  try{parsed=call?(typeof call.arguments==='string'?JSON.parse(call.arguments||'{}'):call.arguments):null}catch(e){error=e instanceof Error?e.message:String(e)}
   const passed=Boolean(call&&!error&&Object.entries(expected).every(([k,v])=>parsed?.[k]===v)&&Object.keys(parsed||{}).length===Object.keys(expected).length);
-  return{name,passed,tool,expected,arguments:parsed,rawArguments:call?.arguments||'',error,durationMs:ms,responseId:response?.id||null};
+  return{name,passed,tool,expected,arguments:parsed,rawArguments:typeof call?.arguments==='string'?call.arguments:JSON.stringify(call?.arguments??null),error,durationMs:ms,responseId:response?.id||null};
 }
 function fn(name,description,properties,required){
   return{type:'function',name,description,parameters:{type:'object',properties,required,additionalProperties:false},strict:true};
@@ -42,7 +44,8 @@ async function call(body){
   try{
     const request={model,max_output_tokens:256,...body};
     if(reasoningEffort)request.reasoning={effort:reasoningEffort};
-    const response=await fetch(apiUrl,{method:'POST',headers:{authorization:`Bearer ${apiKey}`,'content-type':'application/json'},body:JSON.stringify(request),signal:controller.signal});
+    const headers={'content-type':'application/json'};if(apiKey)headers.authorization=`Bearer ${apiKey}`;
+    const response=await fetch(apiUrl,{method:'POST',headers,body:JSON.stringify(request),signal:controller.signal});
     const data=await response.json().catch(()=>({}));
     if(!response.ok)throw new Error(data?.error?.message||data?.message||`HTTP ${response.status}`);
     if(data?.error)throw new Error(data.error.message||JSON.stringify(data.error));
