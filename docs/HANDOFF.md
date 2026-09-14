@@ -8,8 +8,8 @@ Start with `../SPEC.md`. It is the product contract and intentionally does not f
 
 - `master` remains `6cff7e7c1be02e5b75b58e96f8b83830bbc38213` as of the latest comparison in this session.
 - Work remains isolated on `work/shared-loop-evidence-20260913` in draft PR #9.
-- Source CI run `34795600449` passed on commit `5f23fcba18926668550f52892e83fb9d4c6dab26` after the research-before-change invariant was added to `SPEC.md`.
-- Later commits in this branch are documentation/research updates; inspect the latest CI again before promotion.
+- Source CI run `34795956458` passed on commit `dfee2488d96caebf05416819ec36199013a5c751`, including `npm run check` and the real browser->server execution contract. The remote-candidate harness is syntax-checked but no external provider is called by CI.
+- Later documentation/research commits should be rechecked before promotion.
 - The branch is **not deployed** and this document does not claim the public product is fixed.
 
 ## Governing engineering rule
@@ -111,28 +111,34 @@ This is environment-specific evidence, not a claim that those models are intrins
 
 ### Current hosted/open shortlist
 
-**Tier 1 — evaluate first, do not promote yet**
+Do **not** assume one model wins from size, novelty, model-card benchmarks, or popularity. Run the same XRAI harness against the same small candidate set.
 
-- **Nex-N2.5-mini** — Apache-2.0 open weights; purpose-built for agentic coding/browser/computer use; current OpenRouter free endpoint advertises tools and JSON-schema structured output. Official self-host example requires 2x H100. Vendor-reported agent/coding benchmarks are promising but are not XRAI evidence.
-- **Nex-N2.5-Pro** — Apache-2.0; stronger vendor-reported agent/coding scores; official self-host example requires 8x H100. Evaluate only as escalation if mini misses XRAI quality targets.
+**Tier 1 — benchmark side by side, do not promote yet**
 
-**Tier 2 — re-screen if Tier 1 fails or deployment strategy changes**
+- **Nex-N2.5-Mini free** — Apache-2.0 open weights, agentic coding/browser/computer-use focus, current free route explicitly advertises tools/tool choice + JSON-schema output, and recent route availability is high. Official self-host example still requires 2x H100.
+- **NVIDIA Nemotron 3 Super free** — open 120B/12B-active agent-oriented MoE; current free route explicitly advertises tools/tool choice + JSON-schema output. Recent route telemetry is materially faster than current Nex Pro but still shows non-trivial tool/structured-output error, so only XRAI A1 decides whether it is suitable.
+- **GLM-5.3-Flash free, conditional** — current 1M-context coding/agent route. The free route page inspected here did not explicitly prove the exact tool/structured-output interface required by XRAI, although related GLM-5.3 Flash routes do. Include it only if current exact-route metadata confirms the required function semantics before the test.
 
-- DeepSeek V4 Pro — MIT open weights, server-class.
-- GLM-5.3 / GLM-5.3-Flash — current agent/coding-oriented server-class family; verify the exact artifact/license and hosted route at adoption time.
-- Kimi K3 — current large multimodal/agent model with Kimi K3 license; server-class.
-- Other current free/OpenRouter models (including Nemotron variants) should be screened from current model metadata when the benchmark is run, not assumed from an old list.
+**Quality escalation / comparison**
+
+- **Nex-N2.5-Pro free** — stronger vendor-reported agent/coding scores but current route telemetry is much slower and less reliable than the smaller/faster candidates. It is a useful quality comparison, not a presumed winner.
+
+**Deprioritized from the first free set**
+
+- Nemotron 3 Ultra free: tools but no enforced `response_format` on the inspected free route; the route also explicitly warns against confidential/personal data and logs use for security/product improvement.
+- MiniMax M3 free: current route is agent-oriented but the inspected endpoint does not accept `tools`.
+- DeepSeek V4 Pro, GLM-5.3, Kimi K3, large Qwen families and other paid/self-hosted frontier models remain re-screen candidates if the free Tier-1 set fails or deployment constraints change.
 
 ### Free weights != free production inference
 
-OpenRouter currently provides Nex Mini/Pro free endpoints, but programmatic use requires an API key. OpenRouter documents free-model limits of 50 requests/day on a free account, or 1000/day after at least $10 of credits are purchased, and explicitly describes free models as generally unsuitable for production workloads.
+OpenRouter currently exposes several strong zero-token-price routes, but programmatic access requires an API key and free routes are rate limited. OpenRouter documents 50 free-model requests/day for a free account, or 1000/day after at least $10 of credits is purchased, and describes free models as generally unsuitable for production.
 
 Therefore:
 
 - never expose an operator provider key in GitHub Pages;
 - do not call a temporary free tier a production guarantee;
 - a no-user-key hosted public product requires an operator-controlled backend/edge secret, or self-hosted inference;
-- private code must not be sent to a provider unless its data policy is explicitly approved.
+- private code must not be sent to a provider unless its exact provider/data-retention route is explicitly approved.
 
 ## Changes implemented in PR #9
 
@@ -179,6 +185,12 @@ README/UI language now distinguishes browser chat, browser sandbox execution, ho
 
 PR/source CI intentionally no longer reruns known-weak browser models on every commit. GitHub Pages **release preflight** runs the six-case real-model qualification and blocks deployment if it fails.
 
+### Provider-neutral remote-candidate A1 harness added
+
+`test/remote-model-qualification.mjs` and `npm run qualify:remote-model` provide an opt-in OpenResponses-compatible comparison path without changing production inference.
+
+It requires explicit candidate endpoint/model configuration, never consumes production keys implicitly, permits unauthenticated HTTP only on loopback for self-hosted testing, and measures the same six foundational capabilities including real function-call arguments. Normal CI syntax-checks it but does not contact an external model provider.
+
 ### Research-before-change rule added
 
 `SPEC.md` now explicitly requires current research + candidate benchmarking before material model/provider/harness/runtime changes.
@@ -186,9 +198,10 @@ PR/source CI intentionally no longer reruns known-weak browser models on every c
 ## Verification evidence
 
 - Skill-learning focused module harness: **8/8 PASS**; it caught a real rollback restoration defect that was fixed before promotion.
-- Source CI run `34795600449`: **PASS** on `5f23fcba...`, including `npm run check` and the real browser->server execution contract.
-- Current `master` was rechecked and still equals the branch base `6cff7e7...`; no concurrent master commit is being overwritten at this point.
+- Source CI run `34795956458`: **PASS** on `dfee2488...`, including `npm run check` and the real browser->server execution contract after the remote-candidate harness was added/fixed.
+- Current `master` was rechecked and still equals the branch base `6cff7e7...`; no concurrent master commit was being overwritten at the latest check.
 - Active browser inference: **FAIL in CI qualification environment** for the tested local path. This intentionally blocks release under the stronger preflight.
+- Remote hosted/open candidates: **NOT YET RUN** because no authorized candidate-only provider credential or self-hosted endpoint is available in this session.
 - Authentic unmocked A4 repair and A8 transfer experiment: **NOT YET VERIFIED**.
 - No claim is made that the branch or public deployment is fully fixed.
 
@@ -196,7 +209,7 @@ PR/source CI intentionally no longer reruns known-weak browser models on every c
 
 | Product goal | Status | Evidence / blocker |
 | --- | --- | --- |
-| Goals-first SPEC without frozen stack | PASS | SPEC defines outcomes and now includes research-before-change invariant. |
+| Goals-first SPEC without frozen stack | PASS | SPEC defines outcomes and includes research-before-change invariant. |
 | Follow-up goal/context handling | PASS (source) | Existing regression coverage. |
 | Browser chat retrieval/context wiring | PASS (source) | Static/source tests; answer quality remains model-dependent. |
 | Model self-score cannot become learning proof | PASS | Evidence semantics + tests. |
@@ -207,8 +220,8 @@ PR/source CI intentionally no longer reruns known-weak browser models on every c
 | Held-out transfer required before promotion | PASS (module) | Different-task + baseline-improvement + re-verification tests. |
 | Shared agent/tool loop across browser/CLI/MCP | FAIL | Multiple loops still exist. |
 | Durable host restart recovery | FAIL | Run manager remains in-memory. |
-| Qualified primary inference path | FAIL / unresolved | Current browser-local path fails CI A1; hosted candidates are researched but not yet XRAI-qualified. |
-| Authentic model-generated broken-repo repair | NOT YET VERIFIED | Requires candidate model path + protected fixture. |
+| Qualified primary inference path | FAIL / unresolved | Current browser-local path fails CI A1; remote candidates are researched and harnessed but not yet executed. |
+| Authentic model-generated broken-repo repair | NOT YET VERIFIED | Requires a candidate model path + protected fixture. |
 | Real reusable procedure improves held-out task | NOT YET VERIFIED | Module gate exists; full experiment not wired/executed. |
 | Physical Android | NOT YET VERIFIED | Responsive Chromium is not physical-device evidence. |
 | Physical iPhone/Safari | NOT YET VERIFIED | Must test real Safari/device. |
@@ -217,30 +230,18 @@ PR/source CI intentionally no longer reruns known-weak browser models on every c
 
 ## Exact next engineering step
 
-Do not add another browser model and do not weaken the qualification gate.
+Do not add another browser model, do not weaken the gate, and do not choose a favorite model from vendor benchmarks.
 
-Build the **smallest provider-neutral remote-candidate seam**, preserving production defaults:
+The provider-neutral A1 harness now exists. With an **authorized candidate-only server-side credential or local self-hosted OpenResponses endpoint**, run exactly the same harness against:
 
-```text
-model provider config
-  -> OpenResponses-compatible request adapter
-  -> provider capability declaration
-  -> existing bounded XRAI tools / execution adapters
-  -> objective verifier receipts
-  -> candidate qualification report
-```
+1. `nex-agi/nex-n2.5-mini:free`;
+2. `nvidia/nemotron-3-super-120b-a12b:free`;
+3. `z-ai/glm-5.3-flash:free` only if the exact current route declares the required function/tool semantics;
+4. `nex-agi/nex-n2.5-pro:free` as a quality escalation/comparison.
 
-The existing host kernel already speaks OpenAI Responses semantics, and OpenRouter now exposes an OpenResponses-compatible `/api/v1/responses` endpoint. Therefore the first experiment should be a small adapter/configuration seam—not a new agent framework.
+Pass/fail the six A1 capabilities first. Among passing candidates, compare measured latency, function-argument reliability, route availability, privacy constraints and operational limits. Only the objective winner(s) advance to a pinned A4 broken-repo fixture and then the held-out A8 skill-transfer experiment.
 
-Important portability rule: provider-specific server tools must stay behind the provider adapter. For example OpenAI `web_search` and OpenRouter `openrouter:web_search` are not a shared portable tool definition. XRAI's own user-defined tools should remain provider-neutral.
-
-Then, with an authorized server-side candidate credential:
-
-1. run A1 against **Nex-N2.5-mini**;
-2. if it passes, run a pinned A4 broken-repo fixture with unchanged failing + protected tests;
-3. run the second related A8 fixture with a no-skill baseline and candidate-skill trial;
-4. only if all pass, compare Mini with Pro on quality/latency/reliability and choose from measured evidence;
-5. if both fail, re-screen the current frontier list rather than tuning the gate around them.
+If this Tier-1 set fails, re-screen the current frontier landscape instead of tuning XRAI's gate around a model.
 
 No production model/provider changes until that evidence exists.
 
