@@ -16,7 +16,8 @@ const clamp=n=>Math.max(0,Math.min(1,Number(n)||0));
 const mean=xs=>Array.isArray(xs)&&xs.length?xs.reduce((a,b)=>a+clamp(b),0)/xs.length:null;
 const meanRaw=xs=>Array.isArray(xs)&&xs.length?xs.reduce((a,b)=>a+(Number(b)||0),0)/xs.length:null;
 const uid=()=>globalThis.crypto?.randomUUID?.()||`xrai-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
-let modelPromise,knowledgePromise;
+const modelPromises=new Map();
+let knowledgePromise;
 
 function normalizeGenerated(out){
   const x=Array.isArray(out)?out[0]:out,g=x?.generated_text??x?.text??x;
@@ -55,9 +56,8 @@ export async function checkWebGpuAdapter(gpu,timeoutMs=WEBGPU_ADAPTER_TIMEOUT_MS
 export async function resolveBrowserModelProfile(nav={},preferFast=false){const profile=selectBrowserModelProfile(nav,preferFast);if(profile.device!=='webgpu')return profile;const adapter=await getWebGpuAdapter(nav.gpu);if(!adapter)return{...profile,device:'wasm',dtype:'q4'};const features=adapter.features,knowsFeatures=typeof features?.has==='function';return knowsFeatures&&!features.has('shader-f16')?{...profile,dtype:'q4'}:profile}
 export async function withWebGpuFallback(load,profile,onProgress=()=>{}){try{return await load(profile)}catch(error){if(profile?.device!=='webgpu')throw error;onProgress?.(`WebGPU unavailable: ${error?.message||error}; retrying with WASM.`);return load({...profile,device:'wasm',dtype:'q4'})}}
 
-async function transformersModel(onProgress){
-  // Keep the deployed fast fallback until a different inference profile passes the explicit quality gate.
-  const preferred=await resolveBrowserModelProfile(navigator,true),{pipeline}=await import(CDN);
+async function transformersModel(onProgress,preferFast=true){
+  const preferred=await resolveBrowserModelProfile(navigator,preferFast),{pipeline}=await import(CDN);
   const load=async profile=>{
     onProgress?.(`Loading ${profile.label} · ${profile.device.toUpperCase()}…`);
     const generator=await pipeline('text-generation',profile.modelId,{device:profile.device,dtype:profile.dtype,progress_callback:p=>{if(p?.progress!=null)onProgress?.(`Downloading local model ${Math.round(p.progress)}%`);else if(p?.status)onProgress?.(String(p.status))}});
@@ -65,7 +65,17 @@ async function transformersModel(onProgress){
   };
   return withWebGpuFallback(load,preferred,onProgress);
 }
-export async function getLocalModel(onProgress=()=>{}){if(!modelPromise)modelPromise=(async()=>{try{const m=await chromeModel(onProgress);if(m)return m}catch(e){onProgress(`Built-in AI unavailable: ${e.message||e}`)}return transformersModel(onProgress)})().catch(error=>{modelPromise=null;throw error});return modelPromise}
+export async function getLocalModel(onProgress=()=>{},options={}){
+  const preferFast=options.preferFast??true,allowChrome=options.allowChrome??true,key=`${allowChrome?'chrome':'transformers'}:${preferFast?'fast':'full'}`;
+  if(!modelPromises.has(key)){
+    const promise=(async()=>{
+      if(allowChrome){try{const m=await chromeModel(onProgress);if(m)return m}catch(e){onProgress(`Built-in AI unavailable: ${e.message||e}`)}}
+      return transformersModel(onProgress,preferFast);
+    })().catch(error=>{modelPromises.delete(key);throw error});
+    modelPromises.set(key,promise);
+  }
+  return modelPromises.get(key);
+}
 
 async function loadKnowledge(){
   if(!knowledgePromise)knowledgePromise=Promise.all(KNOWLEDGE_FILES.map(async name=>{try{const r=await fetch(`./knowledge/${name}`);return r.ok?{name,text:await r.text()}:null}catch{return null}})).then(rows=>rows.filter(Boolean));
