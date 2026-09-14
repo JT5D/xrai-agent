@@ -18,7 +18,7 @@ const launchArgs=[
   '--disable-dev-shm-usage'
 ];
 
-const browser=await chromium.launch({headless:false,args:launchArgs});
+const browser=await chromium.launch({channel:'chrome',headless:false,args:launchArgs});
 const page=await browser.newPage();
 const report={base,startedAt:new Date().toISOString(),consoleErrors:[],pageErrors:[],cases:[]};
 page.on('console',m=>{if(m.type()==='error')report.consoleErrors.push(m.text())});
