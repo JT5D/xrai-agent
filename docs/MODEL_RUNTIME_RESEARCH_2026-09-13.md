@@ -11,31 +11,51 @@ The governing rule is in `SPEC.md`: research current primary sources and proven 
 3. **Make the primary model path provider-neutral.** Frontier open-weight agent models now exist, but useful checkpoints are generally server-class. Hosted access can make them practical without coupling XRAI to one vendor.
 4. **Do not confuse open weights with free production inference.** Self-hosting open weights still requires compute. Current free hosted endpoints have credentials, rate limits, availability changes, and provider data-policy considerations.
 5. **Use one simple model -> tool -> observation loop by default.** Keep model, session, tools, execution environment, verifier, and persistence behind replaceable seams. Add multi-agent coordination only when an XRAI eval proves benefit.
-6. **Do not adopt a new framework merely because it is popular.** Reuse established interfaces/patterns first; add a dependency only if a controlled XRAI comparison demonstrates a measurable reliability, simplicity, security, or performance gain.
+6. **Do not anchor on the first plausible model.** Run the same XRAI harness against a small current candidate set and select from measured task success, tool accuracy, structured-output reliability, latency, availability, privacy, and operational constraints.
+7. **Do not adopt a new framework merely because it is popular.** Reuse established interfaces/patterns first; add a dependency only if a controlled XRAI comparison demonstrates a measurable reliability, simplicity, security, or performance gain.
 
 ## Primary candidate shortlist
 
-The table records why a model deserves evaluation, not why it should become production default.
+The table records why a model deserves evaluation, not why it should become production default. Free endpoint properties can change; inspect current model metadata immediately before a qualification run.
 
-| Candidate | License / availability | Relevant evidence | Deployability / constraint | XRAI decision |
+| Candidate | Current free route / license | Relevant evidence | Constraint / caution | XRAI decision |
 | --- | --- | --- | --- | --- |
-| **Nex-N2.5-mini** | Apache-2.0 open weights; current free OpenRouter endpoint | Nex model card targets coding, terminal, browser/computer use and environment self-correction. Vendor-reported: Terminal-Bench 2.1 73.4, SWE-Bench Pro 43.8, Toolathlon Verified 54.6, BrowseComp 83.4. OpenRouter advertises tool calling + JSON-schema structured outputs. | Official self-host example is 2x H100. OpenRouter free endpoint requires an API key and is rate limited. | **Tier-1 hosted evaluation candidate** for A1/A4/A8; not approved as default. |
-| **Nex-N2.5-Pro** | Apache-2.0 open weights; current free OpenRouter endpoint | Same agent-oriented training. Vendor-reported: Terminal-Bench 82.7, SWE-Bench Pro 61.2, Toolathlon 68.5, BrowseComp 89.7. Tools + structured outputs advertised on OpenRouter. | Official self-host example is 8x H100. Heavier than mini; free endpoint still rate limited and credentialed. | **Tier-1 escalation candidate** if mini does not meet quality/reliability targets. |
-| **DeepSeek-V4-Pro-0813** | MIT open weights | Current official HF model; vLLM/OpenAI-compatible serving documented. Nex comparison reports strong coding/agent scores, but those cross-model numbers are partly Nex evaluations and must not be treated as XRAI proof. | Very large server-class checkpoint; unsuitable for phone/browser primary inference. | **Tier-2 server/self-host candidate** if operating a large model becomes justified. |
-| **GLM-5.3 / GLM-5.3-Flash** | GLM-5.3 custom license; Flash variants available under MIT in current distributions | HF Transformers describes GLM-5.3-Flash as 320B total / 18B active and oriented toward coding/agentic performance with improved serving efficiency. | Still server-class; current hosted availability, exact license for chosen artifact, tool behavior, privacy, and cost must be checked at decision time. | **Tier-2 candidate**, not yet XRAI-qualified. |
-| **Kimi-K3** | Kimi K3 license; weights available | Current flagship multimodal MoE intended for long-horizon coding/knowledge work/visual agents. | About 2.8T total parameters according to current NVIDIA quantized model documentation; server-class and license must be reviewed for the exact deployment. | **Tier-2 candidate**, no production approval. |
+| **Nex-N2.5-Mini** | `nex-agi/nex-n2.5-mini:free`; Apache-2.0 open weights | Purpose-built for coding, terminal, browser/computer use and environment self-correction. Current OpenRouter route explicitly accepts `tools`, `tool_choice`, and JSON-schema `response_format`; recent route availability was about 99.5% over 3 days. Vendor agent/coding benchmarks are strong but are not XRAI evidence. | Official self-host example is 2x H100. Free route requires provider credentials and is rate limited. | **Tier-1 benchmark candidate.** |
+| **NVIDIA Nemotron 3 Super** | `nvidia/nemotron-3-super-120b-a12b:free`; NVIDIA Open License | 120B total / 12B active agent-oriented MoE. Current free route explicitly supports tools, tool choice, and JSON-schema structured output. Recent OpenRouter telemetry showed roughly 10s P50 E2E, ~3.6-3.7% tool-call error and ~24.7% structured-output error. | Telemetry is route/provider behavior, not XRAI task success. Review exact license and provider privacy before private-code use. | **Tier-1 benchmark candidate.** |
+| **GLM-5.3-Flash** | `z-ai/glm-5.3-flash:free`; free hosted route; verify exact weight artifact/license if self-hosting | Current free route is a 1M-context multimodal model described for efficient coding and long-horizon agents. Paid/batch GLM-5.3-Flash routes explicitly support tools + JSON-schema output. | The current free route page inspected in this pass did **not** explicitly confirm those exact tool/structured-output parameters. Capability metadata must be checked immediately before running A1; do not infer from another route. | **Conditional Tier-1 candidate only if the exact free endpoint exposes the required function semantics.** |
+| **Nex-N2.5-Pro** | `nex-agi/nex-n2.5-pro:free`; Apache-2.0 open weights | Stronger vendor-reported agent/coding scores than Mini and tools/structured outputs are advertised. | Recent OpenRouter route telemetry was materially slower and less reliable: ~44.7s P50 E2E, ~3.1% tool-call error, ~30.8% structured-output error, ~94.2% 3-day availability. Official self-host example is 8x H100. | **Quality-escalation candidate, not presumed default.** |
 
-Other current free/OpenRouter models (for example Nemotron 3 Ultra and changing free-router selections) are worth re-screening when an eval is run, but a changing free router must not be the production identity for an evidence-sensitive agent unless reproducibility requirements are explicitly solved.
+### Useful current models that are *not* first-line free candidates
+
+- **NVIDIA Nemotron 3 Ultra free** supports tools but not `response_format` on the inspected free route. Its page also explicitly warns not to upload confidential/personal data and says use is logged for security/product improvement. That makes it a poor default for private-repository XRAI work despite its size/capability.
+- **MiniMax M3 free** is current and agent-oriented, but the inspected OpenRouter endpoint does not accept `tools`; structured output alone is insufficient for XRAI's tool loop.
+- **DeepSeek V4 Pro**, **GLM-5.3**, **Kimi K3**, large Qwen variants, and paid frontier routes remain server/hosted candidates to re-screen if the free Tier-1 set fails or the operating-cost constraint changes.
+- Do not use a random/free-router aggregate as the qualification identity. Reproducible evidence requires a concrete model route.
+
+## Why this candidate set is deliberately small
+
+The goal is not to benchmark every free model on the internet. The first screen requires the exact primitives XRAI needs:
+
+- strong coding/agent orientation;
+- multi-turn context;
+- real function/tool calling;
+- exact structured arguments or JSON-schema support where applicable;
+- acceptable latency and availability;
+- a route that can be pinned by model identity;
+- privacy terms that can be approved for the intended data class.
+
+Candidates that fail a required interface capability should be eliminated before spending A4/A8 evaluation budget.
 
 ## Free hosted inference is useful for evaluation, not a production guarantee
 
 As of this research date:
 
-- OpenRouter lists Nex-N2.5-mini and Pro `:free` endpoints at zero token price and documents support for tools / tool choice / structured outputs.
-- OpenRouter requires an API key for programmatic inference.
-- OpenRouter's FAQ states free-model accounts are limited to **50 requests/day** unless at least $10 of credits has been purchased, after which the free-model cap is **1000 requests/day**. The FAQ explicitly says free models have low limits and are usually unsuitable for production.
-- OpenRouter's free router changes its available model pool and chooses among compatible free models; it is useful for experimentation, not reproducible model qualification.
-- A static GitHub Pages client must never contain an operator provider key. A true no-user-key public UX with hosted inference therefore requires a server/edge secret or another authorized backend.
+- several strong current model routes are priced at zero tokens, including Nex-N2.5 Mini/Pro, Nemotron 3 Super, GLM-5.3-Flash and other changing free routes;
+- OpenRouter requires an API key for programmatic inference;
+- OpenRouter's FAQ states free-model accounts are limited to **50 requests/day** unless at least $10 of credits has been purchased, after which the free-model cap is **1000 requests/day**; its own FAQ says free models are generally unsuitable for production workloads;
+- OpenRouter's free router changes its model pool and routes among compatible free models, which is useful for experimentation but not a reproducible qualification identity;
+- static GitHub Pages must never contain an operator provider key; a no-user-key hosted public UX therefore requires an authorized backend/edge secret or self-hosted inference;
+- provider data handling varies. For private-code routes, require approved provider routing/data policy (for example data-collection denial / ZDR where supported) rather than assuming that a zero-price endpoint is private.
 
 This means a model can be both open-weight and currently free to call while still being unsuitable as a zero-cost production dependency.
 
@@ -89,6 +109,41 @@ A provider adapter must declare supported features rather than assuming them. In
 
 Do not expose credentials to the static browser. If a hosted provider wins qualification, the public browser should call an authorized XRAI backend/edge endpoint that owns the secret and enforces rate, privacy, tool, and budget policy.
 
+## Provider-neutral qualification harness now in the branch
+
+`test/remote-model-qualification.mjs` + `npm run qualify:remote-model` provide an opt-in A1 comparison without changing production inference.
+
+The harness:
+
+- never reads production provider credentials implicitly;
+- accepts an HTTPS OpenResponses-compatible endpoint, or an unauthenticated loopback HTTP endpoint for self-hosted local evaluation;
+- records the exact model/endpoint, outputs, durations, errors, and response IDs;
+- fail-fasts on exact instruction, arithmetic, conversation recall, real function arguments, code diagnosis, and a bounded edit function call;
+- uses only synthetic A1 prompts, so this stage need not transmit private repository content;
+- is syntax-checked by normal CI but is **not** automatically run against any external provider.
+
+Example runs (only with an authorized candidate credential):
+
+```bash
+XRAI_CANDIDATE_API_URL=https://openrouter.ai/api/v1/responses \
+XRAI_CANDIDATE_API_KEY="$OPENROUTER_API_KEY" \
+XRAI_CANDIDATE_MODEL=nex-agi/nex-n2.5-mini:free \
+npm run qualify:remote-model
+
+XRAI_CANDIDATE_API_URL=https://openrouter.ai/api/v1/responses \
+XRAI_CANDIDATE_API_KEY="$OPENROUTER_API_KEY" \
+XRAI_CANDIDATE_MODEL=nvidia/nemotron-3-super-120b-a12b:free \
+npm run qualify:remote-model
+
+# Run GLM Flash only after current endpoint metadata confirms the required tool/function semantics.
+XRAI_CANDIDATE_API_URL=https://openrouter.ai/api/v1/responses \
+XRAI_CANDIDATE_API_KEY="$OPENROUTER_API_KEY" \
+XRAI_CANDIDATE_MODEL=z-ai/glm-5.3-flash:free \
+npm run qualify:remote-model
+```
+
+A local/self-hosted OpenResponses endpoint can be evaluated without a key on loopback, e.g. `http://127.0.0.1:<port>/v1/responses`.
+
 ## Required qualification before any hosted/open model becomes primary
 
 A candidate only advances if the exact candidate model + provider + harness + tool interface + execution environment passes:
@@ -103,15 +158,30 @@ Only after those pass should the default model/provider change. The prior path r
 
 ## Current next step
 
-Do **not** add another browser model. Build one provider-neutral remote-candidate qualification seam, preserving the current production default, then evaluate **Nex-N2.5-mini** first and **Nex-N2.5-Pro** only as an escalation. If neither passes the XRAI acceptance slice, re-screen the current frontier list instead of tuning the gate around the candidate.
+Do **not** add another browser model and do not pick a winner from model cards or popularity.
+
+Run the exact same A1 harness against the current Tier-1 set:
+
+1. Nex-N2.5-Mini free;
+2. Nemotron 3 Super free;
+3. GLM-5.3-Flash free **only if** current endpoint capability metadata confirms the required tool semantics;
+4. Nex-N2.5-Pro free only as a quality escalation / comparison.
+
+Score pass/fail first, then successful candidates by measured latency, tool/argument reliability, provider availability, privacy route, and operational constraints. Only the objective winner(s) advance to A4 and A8. If the set fails, re-screen the current frontier list rather than tuning the gate around a favorite model.
 
 ## Sources checked
 
-Primary/current sources used in this research pass:
+Primary/current sources used in this research pass include:
 
-- Nex-N2.5 model card and deployment instructions: https://huggingface.co/nex-agi/Nex-N2.5-Pro/blob/main/README.md
+- Nex-N2.5 model/deployment: https://huggingface.co/nex-agi/Nex-N2.5-Pro/blob/main/README.md
 - Nex-N2.5-mini weights/license: https://huggingface.co/nex-agi/Nex-N2.5-mini
-- Nex-N2.5 free endpoints/capabilities: https://openrouter.ai/nex-agi/nex-n2.5-mini:free and https://openrouter.ai/nex-agi/nex-n2.5-pro:free
+- Nex free route: https://openrouter.ai/nex-agi/nex-n2.5-mini:free
+- Nex Pro free route/performance: https://openrouter.ai/nex-agi/nex-n2.5-pro:free
+- Nemotron 3 Super free route/performance: https://openrouter.ai/nvidia/nemotron-3-super-120b-a12b:free
+- Nemotron 3 Ultra free route/privacy/capabilities: https://openrouter.ai/nvidia/nemotron-3-ultra-550b-a55b-20260604:free
+- GLM-5.3-Flash free route: https://openrouter.ai/z-ai/glm-5.3-flash:free
+- GLM-5.3-Flash batch route capability reference: https://openrouter.ai/z-ai/glm-5.3-flash:batch
+- MiniMax M3 endpoint capability reference: https://openrouter.ai/minimax/minimax-m3/api
 - OpenRouter free limits: https://openrouter.ai/docs/faq
 - OpenRouter OpenResponses API: https://openrouter.ai/docs/api/api-reference/responses/create-responses
 - OpenRouter tools: https://openrouter.ai/docs/guides/features/tool-calling
