@@ -2,10 +2,8 @@ import { chromium } from 'playwright';
 import fs from 'node:fs/promises';
 
 const base=(process.argv[2]||process.env.XRAI_QUALIFY_URL||'http://127.0.0.1:8765/').replace(/\/?$/,'/');
-const profile=(process.argv[3]||process.env.XRAI_MODEL_PROFILE||'production').toLowerCase();
-if(!['production','lfm12b'].includes(profile))throw new Error(`Unknown model profile: ${profile}`);
-const artifactDir=`artifacts/model-qualification-${profile}`;
-const MODEL_LOAD_TIMEOUT_MS=profile==='lfm12b'?240_000:150_000;
+const artifactDir='artifacts/model-qualification-production';
+const MODEL_LOAD_TIMEOUT_MS=150_000;
 const CASE_TIMEOUT_MS=45_000;
 await fs.mkdir(artifactDir,{recursive:true});
 
@@ -24,7 +22,7 @@ const launchArgs=[
 
 const browser=await chromium.launch({channel:'chrome',headless:false,args:launchArgs});
 const page=await browser.newPage();
-const report={base,profile,startedAt:new Date().toISOString(),consoleErrors:[],pageErrors:[],cases:[]};
+const report={base,profile:'production',startedAt:new Date().toISOString(),consoleErrors:[],pageErrors:[],cases:[]};
 page.on('console',m=>{if(m.type()==='error')report.consoleErrors.push(m.text())});
 page.on('pageerror',e=>report.pageErrors.push(String(e)));
 
@@ -37,8 +35,7 @@ function jsonCase(name,output,expected,durationMs){
 async function persist(){await fs.writeFile(`${artifactDir}/qualification.json`,JSON.stringify(report,null,2))}
 
 // Ordered cheapest/foundational first. Each case gets only the output budget
-// needed to express the required answer; this measures compliance rather than
-// accidentally benchmarking hundreds of unnecessary generated tokens.
+// required to express the requested answer. Fail immediately on the first miss.
 const cases=[
   {name:'instruction-following',maxNewTokens:12,messages:[{role:'user',content:'Follow this instruction exactly. Reply with only XRAI_OK and no punctuation or explanation.'}],grade:(out,ms)=>exact('instruction-following',out,'XRAI_OK',ms)},
   {name:'arithmetic-sanity',maxNewTokens:12,messages:[{role:'user',content:'Reply with only the number. What is 17 + 25?'}],grade:(out,ms)=>exact('arithmetic-sanity',out,'42',ms)},
@@ -51,18 +48,13 @@ const cases=[
 try{
   await page.goto(base,{waitUntil:'domcontentloaded',timeout:30_000});
   await page.waitForFunction(()=>document.querySelector('#modeLabel')?.textContent?.trim()!=='detecting',null,{timeout:30_000});
-  const loaded=await page.evaluate(async({profile,timeoutMs})=>{
+  const loaded=await page.evaluate(async timeoutMs=>{
     globalThis.__xraiQualificationProgress=[];
-    const work=(async()=>{
-      if(profile==='lfm12b'){
-        const {getLfm12bCandidate}=await import('./model-candidates.js');
-        return getLfm12bCandidate(message=>globalThis.__xraiQualificationProgress.push(String(message)));
-      }
-      const {getLocalModel}=await import('./local-agent.js');
-      return getLocalModel(message=>globalThis.__xraiQualificationProgress.push(String(message)));
-    })().then(model=>{globalThis.__xraiQualificationModel=model;return{model:model.name,progress:globalThis.__xraiQualificationProgress}});
+    const work=import('./local-agent.js')
+      .then(({getLocalModel})=>getLocalModel(message=>globalThis.__xraiQualificationProgress.push(String(message))))
+      .then(model=>{globalThis.__xraiQualificationModel=model;return{model:model.name,progress:globalThis.__xraiQualificationProgress}});
     return Promise.race([work,new Promise((_,reject)=>setTimeout(()=>reject(new Error(`model load timed out after ${Math.round(timeoutMs/1000)}s`)),timeoutMs))]);
-  },{profile,timeoutMs:MODEL_LOAD_TIMEOUT_MS});
+  },MODEL_LOAD_TIMEOUT_MS);
   report.model=loaded.model;report.progress=loaded.progress;report.modelLoadFinishedAt=new Date().toISOString();await persist();
   for(const item of cases){
     const started=Date.now();let output='';let graded;
@@ -79,7 +71,7 @@ try{
     if(!graded.passed){report.stoppedEarly=true;report.stopReason=`${item.name} failed`;break}
   }
   report.passed=report.cases.filter(x=>x.passed).length;report.total=cases.length;report.executed=report.cases.length;report.ok=report.passed===report.total;report.finishedAt=new Date().toISOString();await persist();
-  console.log(JSON.stringify({profile:report.profile,model:report.model,passed:report.passed,total:report.total,executed:report.executed,stoppedEarly:report.stoppedEarly||false,cases:report.cases.map(x=>({name:x.name,passed:x.passed,durationMs:x.durationMs,output:x.output,error:x.error}))},null,2));
+  console.log(JSON.stringify({model:report.model,passed:report.passed,total:report.total,executed:report.executed,stoppedEarly:report.stoppedEarly||false,cases:report.cases.map(x=>({name:x.name,passed:x.passed,durationMs:x.durationMs,output:x.output,error:x.error}))},null,2));
   if(!report.ok)throw new Error(`Model qualification failed ${report.passed}/${report.total}; executed ${report.executed}/${report.total}`);
 }catch(error){
   report.ok=false;report.error=error instanceof Error?error.message:String(error);report.finishedAt=new Date().toISOString();await persist();throw error;
